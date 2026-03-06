@@ -1,0 +1,13 @@
+#!/bin/bash -eu
+
+#mkdir -p "$HOME"/.cache/virtme-ng/.ssh/
+#cp "$HOME"/.ssh/*.pub "$HOME"/.cache/virtme-ng/.ssh/
+
+"$BIN"/vng/cmd --kconfig --dry-run --configitem MODULES=y > "$TMP_DIR"/vng-min.config
+
+# keep only positive flags, because MIN_CONFIG takes precedence and could turn off required flags
+awk '/^CONFIG_[A-Za-z0-9_]+=/' "$TMP_DIR"/vng-min.config > "$TMP_DIR"/vng-min.config.new
+mv "$TMP_DIR"/vng-min.config.new "$TMP_DIR"/vng-min.config
+
+"$BIN"/vng/stop-vm -f
+"$BIN"/vng/start-console

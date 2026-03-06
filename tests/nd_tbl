@@ -1,0 +1,33 @@
+INCLUDE ../include/defaults.conf
+
+DEFAULTS OVERRIDE
+DEPS := ${DEPS} scapy
+INSTALL_DEPS = ${DEPS}
+AUTO_INSTALL_DEPS = 1
+POST_BUILD_APPEND = rsync -a --delete ${LINUX_GIT}/../bugs/ipv6_disable/ ${OUTPUT_DIR}/bug/
+VNG_ARGS = --user root -a "ipv6.disable=1"
+BUILD_TYPE = defconfig
+ADD_CONFIG = ${BUILD_DIR}/tools/testing/selftests/net/config ${CONFIG_DIR}/ipv6=m.config
+PREP_TEST = cd ${OUTPUT_DIR}/bug &&
+DIE_ON_FAILURE = 0
+
+TEST_START
+TEST_TYPE = build
+ADD_CONFIG = ${BUILD_DIR}/tools/testing/selftests/net/config ${CONFIG_DIR}/ipv6=n.config
+
+TEST_START
+TEST_TYPE = test
+TEST_BIN = ./reproducer_bond_ipv6_chk_addr.sh
+TEST = ${DO_TEST_SIMPLE}
+
+TEST_START
+TEST_TYPE = test
+BUILD_NOCLEAN = 1
+TEST_BIN = ./reproducer_bpf_redirect_neigh.sh
+TEST = ${DO_TEST_SIMPLE}
+
+TEST_START
+TEST_TYPE = test
+BUILD_NOCLEAN = 1
+TEST_BIN = ./reproducer_bpf_redirect_neigh_v6.sh
+TEST = ${DO_TEST_SIMPLE}

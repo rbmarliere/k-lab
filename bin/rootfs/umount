@@ -1,0 +1,21 @@
+#!/bin/bash -eu
+
+[[ -n ${ROOT-} ]] || exit 0
+
+# unmount mountpoints under ROOT, deepest first
+ret=0
+while read -r m; do
+	if "$BIN"/run --host --as-root umount "$m"; then
+		continue
+	fi
+
+	# ignore races where the target is already gone (e.g. "not mounted").
+	if ! grep -q " $m " /proc/mounts 2>/dev/null; then
+		continue
+	fi
+
+	ret=1
+done < <(
+	grep " $ROOT/" /proc/mounts | awk '{print $2}' | sort -r
+)
+exit $ret

@@ -1,0 +1,3 @@
+#!/bin/bash -eu
+
+"$BUILD_DIR"/scripts/clang-tools/gen_compile_commands.py -d "$OUTPUT_DIR"

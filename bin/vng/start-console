@@ -1,0 +1,10 @@
+#!/bin/bash -eu
+
+[[ -p $TMP_DIR/console ]] || mkfifo "$TMP_DIR"/console
+[[ -f $TMP_DIR/vng.log ]] || touch "$TMP_DIR"/vng.log
+
+if [[ -f $TMP_DIR/console.pid ]] && kill -0 -- "$(<"$TMP_DIR"/console.pid)" 2>/dev/null; then
+	: # already running
+else
+	setsid "$BIN"/vng/read-console >/dev/null 2>&1 &
+fi

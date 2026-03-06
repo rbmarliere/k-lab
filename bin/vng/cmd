@@ -1,0 +1,5 @@
+#!/bin/bash -eu
+
+export PATH="$VNG_DIR:$VNG_DIR/virtme/guest/bin:$PATH"
+
+exec vng "$@"

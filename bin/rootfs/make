@@ -1,0 +1,4 @@
+#!/bin/bash -eu
+
+cmd=(make "$BUILD_OPTIONS" -C "$BUILD_DIR" O="$OUTPUT_DIR" "$@")
+exec "$BIN"/rootfs/run "${cmd[@]}"

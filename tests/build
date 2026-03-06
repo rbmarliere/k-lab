@@ -1,0 +1,12 @@
+MACHINE = builder
+
+INCLUDE ../include/base.conf
+INCLUDE ../include/rootfs.conf
+INCLUDE ../include/setenv.conf
+
+DEFAULTS OVERRIDE
+AUTO_INSTALL_DEPS = 1
+
+TEST_START
+TEST_TYPE = build
+BUILD_TYPE = defconfig

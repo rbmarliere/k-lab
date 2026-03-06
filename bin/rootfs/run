@@ -1,0 +1,46 @@
+#!/bin/bash -eu
+
+die() {
+	echo "ERROR: $*" >&2
+	exit 1
+}
+
+if [[ $# -eq 0 ]]; then
+	die "missing command"
+fi
+
+env_args=(
+	PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+	SHELL=/bin/sh
+	TMPDIR=/tmp
+	HOME=/root
+	USER=root
+	LOGNAME=root
+)
+if [[ -n ${TERM-} ]]; then
+	env_args+=(
+		TERM="$TERM"
+	)
+fi
+if [[ -n ${LANG-} ]]; then
+	env_args+=(LANG="$LANG")
+else
+	env_args+=(LANG=C)
+fi
+if [[ -n ${LC_ALL-} ]]; then
+	env_args+=(LC_ALL="$LC_ALL")
+fi
+
+# Start with a minimal explicit environment inside the rootfs instead of
+# rebuilding argv into shell text or inheriting the full host environment.
+# Commands always run as uid 0 inside the user namespace with a root-style
+# login environment.
+exec unshare \
+	--map-root-user \
+	--map-auto \
+	--mount \
+	--root "$ROOT" \
+	-- \
+	env -i \
+	"${env_args[@]}" \
+	"$@"

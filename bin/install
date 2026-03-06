@@ -1,0 +1,119 @@
+#!/bin/bash -eu
+
+auto_install=
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+	--auto)
+		auto_install=1
+		shift
+		;;
+	--)
+		shift
+		break
+		;;
+	*)
+		break
+		;;
+	esac
+done
+
+if [[ $# -eq 0 ]]; then
+	exit 0
+fi
+
+die() {
+	echo "ERROR: $*" >&2
+	exit 1
+}
+
+lookup_package() {
+	local map_file=$1
+	local dep=$2
+	awk -v key="$dep" '
+		$0 ~ /^[[:space:]]*#/ || NF == 0 { next }
+		$1 == key {
+			print $2
+			found = 1
+			exit
+		}
+		END {
+			if (!found) {
+				exit 1
+			}
+		}
+	' "$map_file"
+}
+
+run() {
+	local mode=$1
+	shift
+
+	if [[ -n ${ROOT-} ]]; then
+		"$BIN"/rootfs/run "$@"
+		return
+	fi
+
+	if [[ $mode == check ]]; then
+		"$@"
+	else
+		"$BIN"/run --as-root "$@"
+	fi
+}
+
+os_release=/etc/os-release
+if [[ -n ${ROOT-} ]]; then
+	os_release="$ROOT/etc/os-release"
+fi
+
+[[ -r $os_release ]] || die "unable to read file: $os_release"
+
+ID=
+# shellcheck disable=SC1090
+. "$os_release"
+
+case "$ID" in
+debian)
+	pkg_file="$BIN"/../pkg/debian
+	check_cmd=(dpkg -s)
+	update_cmd=(apt update)
+	install_cmd=(apt install -y)
+	;;
+*suse*)
+	pkg_file="$BIN"/../pkg/suse
+	check_cmd=(rpm -q --whatprovides)
+	update_cmd=(zypper --gpg-auto-import-keys refresh)
+	install_cmd=(zypper --non-interactive install)
+	;;
+*)
+	die "unsupported distro ID=$ID"
+	;;
+esac
+
+packages=()
+for dep in "$@"; do
+	pkg=$(lookup_package "$pkg_file" "$dep") || die "unknown dependency '$dep' for '$ID'"
+	packages+=("$pkg")
+done
+
+mapfile -t packages < <(printf '%s\n' "${packages[@]}" | sort -u)
+
+missing=()
+for pkg in "${packages[@]}"; do
+	if ! run check "${check_cmd[@]}" "$pkg" >/dev/null; then
+		missing+=("$pkg")
+	fi
+done
+
+if [[ ${#missing[@]} -gt 0 ]]; then
+	if [[ -z $auto_install ]]; then
+		echo "ERROR: missing dependency packages: ${missing[*]}" >&2
+		echo "ERROR: set AUTO_INSTALL_DEPS=1 to install them automatically" >&2
+		exit 1
+	fi
+
+	echo "Installing missing dependency packages: ${missing[*]}"
+	run install "${update_cmd[@]}" || true
+	run install "${install_cmd[@]}" "${missing[@]}"
+else
+	echo "All dependencies already installed!"
+fi

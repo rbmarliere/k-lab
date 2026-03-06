@@ -1,0 +1,8 @@
+INCLUDE ../include/defaults.conf
+
+DEFAULTS OVERRIDE
+AUTO_INSTALL_DEPS = 1
+
+TEST_START
+TEST_TYPE = test
+TEST = ${SSH} sh -c 'sleep infinity'

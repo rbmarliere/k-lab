@@ -1,0 +1,23 @@
+#!/bin/bash -eu
+
+"$BIN"/make headers
+"$BIN"/make -C tools/testing/selftests SKIP_TARGETS= TARGETS=bpf install #INSTALL_PATH=
+
+#KDIR=$(pwd)
+#if [[ -d tools/testing/selftests/bpf/bpf_testmod ]]; then
+#	kmod_dir="$KDIR"/tools/testing/selftests/bpf/bpf_testmod
+#else
+#	# older kver
+#	kmod_dir="$KDIR"/tools/testing/selftests/bpf/test_kmods
+#fi
+#"${MAKE[@]}" M="$kmod_dir" KBUILD_MODPOST_WARN=1
+#if [[ -n $ROOT ]]; then
+#	"${MAKE[@]}" modules_install M="$kmod_dir"
+#else
+#	# MODLIB: https://build.opensuse.org/projects/openSUSE:Factory/packages/kmod/files/README.usrmerge?expand=1
+#	"${MAKE[@]}" modules_install \
+#		M="$kmod_dir" \
+#		INSTALL_MOD_PATH="$OUTPUT/.virtme_mods" \
+#		KERNELRELEASE=0.0.0 \
+#		MODLIB='$(INSTALL_MOD_PATH)/usr/lib/modules/$(KERNELRELEASE)'
+#fi
