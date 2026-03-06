@@ -1,0 +1,80 @@
+#!/bin/bash -eu
+
+THIS_DIR=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")
+
+# shellcheck disable=SC1091
+source "$THIS_DIR/../env.sh"
+
+die() {
+	echo "ERROR: $*" >&2
+	exit 1
+}
+
+run_as_user=
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+	--as-user)
+		run_as_user=1
+		shift
+		;;
+	--)
+		shift
+		break
+		;;
+	*)
+		break
+		;;
+	esac
+done
+
+[[ $# -gt 0 ]] || die "missing command"
+resolve_root || exit 1
+
+chroot_args=()
+env_args=(
+	PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+	TMPDIR=/tmp
+)
+
+if [[ -n $run_as_user ]]; then
+	uid=$(id -u)
+	gid=$(id -g)
+	user=$(id -un 2>/dev/null || echo user)
+
+	chroot_args+=(--userspec="$uid:$gid")
+	env_args+=(
+		SHELL=/bin/sh
+		HOME=/tmp
+		USER="$user"
+		LOGNAME="$user"
+	)
+else
+	env_args+=(
+		SHELL=/bin/sh
+		HOME=/root
+		USER=root
+		LOGNAME=root
+	)
+fi
+
+if [[ -n ${TERM-} ]]; then
+	env_args+=(
+		TERM="$TERM"
+	)
+fi
+if [[ -n ${LANG-} ]]; then
+	env_args+=(LANG="$LANG")
+else
+	env_args+=(LANG=C)
+fi
+if [[ -n ${LC_ALL-} ]]; then
+	env_args+=(LC_ALL="$LC_ALL")
+fi
+
+# Keep the environment explicit and run the command via a real host-root
+# chroot so package managers see normal rootfs ownership semantics.
+if [[ $(id -u) -eq 0 ]]; then
+	exec chroot "${chroot_args[@]}" "$ROOT" /usr/bin/env -i "${env_args[@]}" "$@"
+fi
+
+exec sudo -n -- chroot "${chroot_args[@]}" "$ROOT" /usr/bin/env -i "${env_args[@]}" "$@"

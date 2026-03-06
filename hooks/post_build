@@ -1,0 +1,10 @@
+#!/bin/bash -eu
+
+arch=${ARCH:-x86_64}
+db=$BUILD_DIR/compile_commands-$arch.json
+
+"$BUILD_DIR"/scripts/clang-tools/gen_compile_commands.py \
+	-d "$OUTPUT_DIR" \
+	-o "$db"
+
+ln -sfnT "$(basename -- "$db")" "$BUILD_DIR"/compile_commands.json

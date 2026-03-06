@@ -1,0 +1,3 @@
+#!/bin/bash -eu
+
+rm -rf "$OUTPUT_DIR"/.virtme_mods

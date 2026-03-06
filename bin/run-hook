@@ -1,0 +1,22 @@
+#!/bin/bash -u
+
+if [[ $# -eq 0 ]]; then
+	echo "ERROR: missing hook" >&2
+	exit 1
+fi
+
+hook=$1
+shift
+
+if [[ ! -x $hook ]]; then
+	echo "ERROR: hook is not executable: $hook" >&2
+	exit 1
+fi
+
+echo "HOOK: $hook" >&2
+"$hook" "$@"
+rc=$?
+if [[ $rc -ne 0 ]]; then
+	echo "ERROR: hook failed: $hook ($rc)" >&2
+fi
+exit $rc

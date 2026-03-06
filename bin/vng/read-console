@@ -1,0 +1,8 @@
+#!/bin/bash -eu
+
+echo $$ >"$TMP_DIR"/console.pid
+
+# keep writer alive
+exec 3<>"$TMP_DIR"/console
+# follow byte stream
+tail -c +0 -F -- "$TMP_DIR"/vng.log >&3

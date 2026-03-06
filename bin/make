@@ -1,0 +1,31 @@
+#!/bin/bash -eu
+
+build_options=${BUILD_OPTIONS-}
+for arg in "$@"; do
+	case "$arg" in
+	clean | mrproper | distclean)
+		build_options=
+		break
+		;;
+	esac
+done
+
+make_cmd=(make)
+if [[ -n $build_options ]]; then
+	make_cmd+=("$build_options")
+fi
+make_cmd+=(-C "$BUILD_DIR" O="$OUTPUT_DIR")
+if [[ -n ${ARCH-} ]]; then
+	make_cmd+=("ARCH=$ARCH")
+fi
+if [[ -n ${CROSS_COMPILE-} ]]; then
+	make_cmd+=("CROSS_COMPILE=$CROSS_COMPILE")
+fi
+
+if [[ -n ${ROOT-} ]]; then
+	if [[ ${BUILD_IN_ROOT:-0} == 1 ]] || ! "$BIN"/cross is-foreign "${ARCH:-x86_64}"; then
+		exec "$BIN"/rootfs/make "$@"
+	fi
+fi
+
+exec "${make_cmd[@]}" "$@"

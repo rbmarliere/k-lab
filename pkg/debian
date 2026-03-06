@@ -1,0 +1,13 @@
+binutils binutils-dev
+gxx g++
+iperf iperf3
+libcap libcap-dev
+libdw libdw-dev
+libdwarf libdwarf-dev
+libelf libelf-dev
+libnuma libnuma-dev
+libssl libssl-dev
+llvm-dev llvm-dev
+python-yaml python3-yaml
+scapy python3-scapy
+ssh openssh-server

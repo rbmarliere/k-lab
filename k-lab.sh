@@ -1,0 +1,303 @@
+#!/bin/bash
+
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+	echo "ERROR: source ${BASH_SOURCE[0]} to load the k-lab wrapper and completion" >&2
+	exit 1
+fi
+
+THIS_DIR=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")
+# shellcheck disable=SC1091
+if ! source "$THIS_DIR/bin/env.sh"; then
+	return 1
+fi
+if ! require_ktest; then
+	return 1
+fi
+if ! require_vng; then
+	return 1
+fi
+
+usage() {
+	echo "usage: kt [-B] [-C] [-D name=value] [-n] <test>"
+	echo
+	echo "options:"
+	echo "  -B              set BUILD_TYPE=nobuild"
+	echo "  -C              set BUILD_NOCLEAN=1"
+	echo "  -D name=value   pass through to ktest.pl as -D name=value or -D name:=value"
+	echo "  -n              print resolved test options and exit"
+	echo "  -h              show this help"
+	echo
+	echo "run kt from within a Linux kernel worktree."
+	echo "test names support Bash tab completion from tests/."
+}
+
+_kt_completion() {
+	local cur=$2
+	local arr i file full_path
+	mapfile -t arr < <(cd "$THIS_DIR/tests" && compgen -f -- "$cur")
+	COMPREPLY=()
+	for ((i = 0; i < ${#arr[@]}; ++i)); do
+		file=${arr[i]}
+		full_path=$file
+		if [[ $full_path != /* ]]; then
+			full_path=$THIS_DIR/tests/$full_path
+		fi
+		if [[ -f $full_path && $file == *.conf ]]; then
+			continue
+		fi
+		if [[ -d $full_path ]]; then
+			file=$file/
+		fi
+		COMPREPLY+=("$file")
+	done
+}
+
+_kt_vng_ports_from_dry_run() {
+	sed -n 's/.* VNG_PORT=\([0-9][0-9]*\)\( \|$\).*/\1/p' | sort -u
+}
+
+_kt_vng_port_in_use() {
+	local port=$1
+	local re
+
+	re="^(.*python[^ ]* )?[^ ]*/vng .* --ssh ${port}( |$)"
+	re+="|^(.*python[^ ]* )?[^ ]*/virtme-run .* --port ${port}( |$)"
+	re+="|^[^ ]*/qemu-system-[^ ]* .*guest-cid=${port}([ ,]|$)"
+
+	pgrep -f -- "$re" >/dev/null
+}
+
+_kt_tcp_port_in_use() {
+	local port=$1
+	local port_hex
+
+	printf -v port_hex '%04X' "$port"
+
+	grep -Eiq "^[[:space:]]*[0-9]+: [[:xdigit:]]+:${port_hex} " /proc/net/tcp /proc/net/tcp6 2>/dev/null
+}
+
+_kt_dry_run_value() {
+	local key=$1
+	sed -n "s/^${key} = //p" | head -n 1
+}
+
+_kt_normalize_root_value() {
+	local root=${1-}
+
+	case "$root" in
+	"" | 0)
+		printf '%s\n' ""
+		;;
+	*)
+		printf '%s\n' "$root"
+		;;
+	esac
+}
+
+_kt_preflight_root() {
+	local root=$1
+	local arch=${2-}
+
+	[[ -n $root ]] || return 0
+
+	if [[ ! -d $root ]]; then
+		echo "ERROR: ROOT is not a directory: $root" >&2
+		return 1
+	fi
+	if [[ ! -r $root || ! -w $root || ! -x $root ]]; then
+		echo "ERROR: ROOT must be readable, writable, and searchable by $(id -un): $root" >&2
+		return 1
+	fi
+
+	"$THIS_DIR"/bin/cross preflight-root "$root" "$arch" || return 1
+}
+
+_kt_confirm() {
+	local info=$1
+	local prompt=$2
+	local reply
+
+	echo "$info" >&2
+	printf '%s' "$prompt" >&2
+	if ! IFS= read -r reply; then
+		echo >&2
+		return 1
+	fi
+
+	case $reply in
+	"" | y | Y | yes | YES | Yes)
+		return 0
+		;;
+	*)
+		echo "Aborted." >&2
+		return 1
+		;;
+	esac
+}
+
+kt() {
+	local OPTIND opt
+	local kargs=()
+	local dry_run=0
+
+	if ! require_ktest; then
+		return 1
+	fi
+	if ! require_vng; then
+		return 1
+	fi
+
+	while getopts ":CBD:hn" opt; do
+		case "$opt" in
+		C) kargs+=("-D" "BUILD_NOCLEAN=1") ;;
+		B) kargs+=("-D" "BUILD_TYPE=nobuild") ;;
+		D)
+			case "$OPTARG" in
+			ROOT=* | ARCH=* | VNG_PORT=*)
+				echo "ERROR: use -D ${OPTARG%%=*}:=${OPTARG#*=} for file-scoped overrides" >&2
+				return 2
+				;;
+			esac
+			kargs+=("-D" "$OPTARG")
+			;;
+		n) dry_run=1 ;;
+		h)
+			usage
+			return 0
+			;;
+		:)
+			echo "ERROR: -$OPTARG requires an argument" >&2
+			usage >&2
+			return 2
+			;;
+		\?)
+			echo "ERROR: unknown option -$OPTARG" >&2
+			usage >&2
+			return 2
+			;;
+		esac
+	done
+	shift "$((OPTIND - 1))"
+
+	if ((dry_run)); then
+		kargs+=("--dry-run")
+	fi
+
+	if (($# == 0)); then
+		usage >&2
+		return 2
+	fi
+	if [[ ! -d $THIS_DIR/tests ]]; then
+		echo "ERROR: $THIS_DIR/tests: Directory not found" >&2
+		return 2
+	fi
+
+	local file_path="$1"
+	if [[ ! "$file_path" = /* ]]; then
+		file_path="$THIS_DIR/tests/$file_path"
+	fi
+	if [[ ! -e $file_path ]]; then
+		echo "ERROR: missing test: $file_path" >&2
+		return 1
+	fi
+
+	if ((dry_run)); then
+		command "$KTEST_PL" "${kargs[@]}" "$file_path"
+		return $?
+	fi
+
+	local dry_run_output
+	if ! dry_run_output=$(command "$KTEST_PL" "${kargs[@]}" --dry-run "$file_path" </dev/null 2>&1); then
+		printf '%s\n' "$dry_run_output" >&2
+		return 1
+	fi
+
+	local tmp_dir
+	tmp_dir=$(printf '%s\n' "$dry_run_output" | sed -n 's/^TMP_DIR = //p' | head -n 1)
+	if [[ -z $tmp_dir ]]; then
+		echo "ERROR: failed to resolve TMP_DIR from ktest.pl --dry-run" >&2
+		printf '%s\n' "$dry_run_output" >&2
+		return 1
+	fi
+
+	local vng_port
+	while read -r vng_port; do
+		[[ -n $vng_port ]] || continue
+		if _kt_vng_port_in_use "$vng_port" || _kt_tcp_port_in_use "$vng_port"; then
+			echo "ERROR: VNG_PORT is already in use: $vng_port" >&2
+			return 1
+		fi
+	done < <(printf '%s\n' "$dry_run_output" | _kt_vng_ports_from_dry_run)
+
+	local root arch
+	local summary_parts=()
+	root=$(_kt_normalize_root_value "$(printf '%s\n' "$dry_run_output" | _kt_dry_run_value ROOT)")
+	arch=$(printf '%s\n' "$dry_run_output" | _kt_dry_run_value ARCH)
+	if [[ -n $root ]]; then
+		_kt_preflight_root "$root" "$arch" || return 1
+	fi
+
+	if [[ -n $root ]]; then
+		summary_parts+=("ROOT=$root")
+		if [[ -n $arch ]]; then
+			summary_parts+=("ARCH=$arch")
+		fi
+	fi
+	if [[ ${#summary_parts[@]} -gt 0 ]]; then
+		local IFS=', '
+		_kt_confirm \
+			"INFO: privileged path configured: ${summary_parts[*]}" \
+			'Do you want to continue? [Y/n] ' || return 1
+	fi
+
+	(
+		local holder_pid lock_file pid
+
+		holder_pid=${BASHPID:-$$}
+		lock_file="${tmp_dir%%/}.lock"
+
+		if ! (
+			set -o noclobber
+			printf '%s\n' "$holder_pid" >"$lock_file"
+		) 2>/dev/null; then
+			if [[ ! -e $lock_file ]]; then
+				echo "ERROR: failed to create lock file: $lock_file" >&2
+				exit 1
+			fi
+
+			if [[ -f $lock_file ]]; then
+				pid=$(<"$lock_file")
+				if [[ $pid =~ ^[0-9]+$ ]]; then
+					if ! kill -0 "$pid" 2>/dev/null; then
+						rm -f "$lock_file"
+					fi
+				fi
+			fi
+
+			if ! (
+				set -o noclobber
+				printf '%s\n' "$holder_pid" >"$lock_file"
+			) 2>/dev/null; then
+				if [[ ! -e $lock_file ]]; then
+					echo "ERROR: failed to create lock file: $lock_file" >&2
+					exit 1
+				fi
+
+				echo "ERROR: $tmp_dir is in use" >&2
+				exit 1
+			fi
+		fi
+
+		trap 'rm -f "$lock_file"' EXIT
+
+		if [[ -f $tmp_dir/kt.log ]]; then
+			_kt_confirm \
+				"INFO: TMP_DIR already contains a previous kt.log: $tmp_dir/kt.log" \
+				"Do you want to continue and reuse $tmp_dir? [Y/n] " || exit 1
+		fi
+
+		command "$KTEST_PL" "${kargs[@]}" "$file_path"
+	)
+}
+
+complete -o nospace -F _kt_completion kt

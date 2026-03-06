@@ -1,0 +1,7 @@
+binutils binutils-devel
+gcc gcc7
+gxx gcc7-c++
+libdw libdw-devel
+libelf libelf-devel
+libssl libopenssl-devel
+ssh openssh

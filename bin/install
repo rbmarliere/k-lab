@@ -1,0 +1,169 @@
+#!/bin/bash -eu
+
+auto_install=
+declare -A warned_fallbacks=()
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+	--auto)
+		auto_install=1
+		shift
+		;;
+	--)
+		shift
+		break
+		;;
+	*)
+		break
+		;;
+	esac
+done
+
+if [[ $# -eq 0 ]]; then
+	exit 0
+fi
+
+die() {
+	echo "ERROR: $*" >&2
+	exit 1
+}
+
+use_root_install() {
+	[[ -n ${ROOT-} ]] || return 1
+	if [[ ${BUILD_IN_ROOT:-0} == 1 ]]; then
+		return 0
+	fi
+
+	! "$BIN"/cross is-foreign "${ARCH:-x86_64}"
+}
+
+lookup_package() {
+	local map_file=$1
+	local dep=$2
+	local pkg
+
+	if pkg=$(
+		awk -v key="$dep" '
+		$0 ~ /^[[:space:]]*#/ || NF == 0 { next }
+		$1 == key {
+			print $2
+			found = 1
+			exit
+		}
+		END {
+			if (!found) {
+				exit 1
+			}
+		}
+	' "$map_file"
+	); then
+		printf '%s\n' "$pkg"
+		return 0
+	fi
+
+	if [[ -z ${warned_fallbacks[$dep]+x} ]]; then
+		echo "WARNING: dependency '$dep' is not mapped in $(basename "$map_file"); using '$dep' as the package name" >&2
+		warned_fallbacks[$dep]=1
+	fi
+
+	printf '%s\n' "$dep"
+}
+
+run() {
+	local mode=$1
+	shift
+
+	if use_root_install; then
+		"$BIN"/rootfs/run "$@"
+		return
+	fi
+
+	if [[ $mode == check ]]; then
+		"$@"
+	else
+		"$BIN"/run --as-root "$@"
+	fi
+}
+
+os_release=/etc/os-release
+if use_root_install; then
+	os_release="$ROOT/etc/os-release"
+fi
+
+[[ -r $os_release ]] || die "unable to read file: $os_release"
+
+ID=
+VERSION_ID=
+# shellcheck disable=SC1090
+. "$os_release"
+
+case "$ID" in
+debian)
+	pkg_file="$BIN"/../pkg/debian
+	check_cmd=(dpkg -s)
+	repair_cmd=(dpkg --configure -a)
+	update_cmd=(apt update)
+	install_cmd=(apt install -y)
+	;;
+opensuse-tumbleweed)
+	pkg_file="$BIN"/../pkg/tumbleweed
+	check_cmd=(rpm -q --whatprovides)
+	repair_cmd=()
+	update_cmd=(zypper --gpg-auto-import-keys refresh)
+	install_cmd=(zypper --non-interactive install)
+	;;
+sles)
+	case "${VERSION_ID:-}" in
+	12*)
+		pkg_file="$BIN"/../pkg/sles12
+		;;
+	15*)
+		pkg_file="$BIN"/../pkg/sles15
+		;;
+	*)
+		die "unsupported SLES version VERSION_ID=${VERSION_ID:-unknown}"
+		;;
+	esac
+	check_cmd=(rpm -q --whatprovides)
+	repair_cmd=()
+	update_cmd=(zypper --gpg-auto-import-keys refresh)
+	install_cmd=(zypper --non-interactive install)
+	;;
+*suse*|opensuse*)
+	die "unsupported SUSE-family distro ID=$ID VERSION_ID=${VERSION_ID:-unknown}"
+	;;
+*)
+	die "unsupported distro ID=$ID"
+	;;
+esac
+
+packages=()
+for dep in "$@"; do
+	pkg=$(lookup_package "$pkg_file" "$dep")
+	packages+=("$pkg")
+done
+
+mapfile -t packages < <(printf '%s\n' "${packages[@]}" | sort -u)
+
+missing=()
+for pkg in "${packages[@]}"; do
+	if ! run check "${check_cmd[@]}" "$pkg" >/dev/null; then
+		missing+=("$pkg")
+	fi
+done
+
+if [[ ${#missing[@]} -gt 0 ]]; then
+	if [[ -z $auto_install ]]; then
+		echo "ERROR: missing dependency packages: ${missing[*]}" >&2
+		echo "ERROR: automatic dependency installation is disabled; set AUTO_INSTALL_DEPS=1 to install them automatically" >&2
+		exit 1
+	fi
+
+	echo "Installing missing dependency packages: ${missing[*]}"
+	if [[ ${#repair_cmd[@]} -gt 0 ]]; then
+		run install "${repair_cmd[@]}" || true
+	fi
+	run install "${update_cmd[@]}" || true
+	run install "${install_cmd[@]}" "${missing[@]}"
+else
+	echo "All dependencies already installed!"
+fi

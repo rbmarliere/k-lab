@@ -1,0 +1,47 @@
+#!/bin/bash -eu
+
+THIS_DIR=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")
+
+# shellcheck disable=SC1091
+source "$THIS_DIR/env.sh"
+
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+	--)
+		shift
+		break
+		;;
+	*=*)
+		key=${1%%=*}
+		val=${1#*=}
+		if [[ $val == '$'{*'}' ]]; then
+			val=
+		fi
+		if [[ $key == ROOT && $val == 0 ]]; then
+			val=
+		fi
+		if [[ $key == ROOT && -n $val ]]; then
+			ROOT=$val
+			resolve_root || exit 1
+			val=$ROOT
+		fi
+		if [[ -n $val ]]; then
+			export "$key=$val"
+		else
+			unset "$key"
+		fi
+		shift
+		;;
+	*)
+		echo "ERROR: invalid setenv argument '$1'" >&2
+		exit 1
+		;;
+	esac
+done
+
+if [[ $# -eq 0 ]]; then
+	echo "ERROR: missing command after --" >&2
+	exit 1
+fi
+
+exec "$@"

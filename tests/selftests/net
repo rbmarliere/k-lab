@@ -1,0 +1,57 @@
+ROOT := /roots/suse/Tumbleweed/vm-x86_64
+
+#ROOT := /roots/suse/16.0/vm-x86_64
+#SUSE_VERSION = 16
+#SUSE_PATCHLEVEL = 0
+
+INCLUDE ../../include/suse.conf
+
+DEFAULTS OVERRIDE
+VNG_ARGS = --user root
+POST_BUILD_APPEND = ${RUN_HOOK} ${THIS_DIR}/hooks/selftests/net/post_build
+DEPS = libcap tcpdump libnuma python3-yaml python3-jsonschema iperf net-tools net-tools-deprecated
+TEST_DIR = ${OUTPUT_DIR}/kselftest/kselftest_install/net
+PREP_TEST = cd ${TEST_DIR} &&
+
+ADD_CONFIG = ${BUILD_DIR}/tools/testing/selftests/net/config
+
+
+TEST := default
+
+TEST_START IF ${TEST} == default
+TEST_TYPE = test
+TEST = ${SSH} sh -c 'sleep infinity'
+BUILD_TYPE = defconfig
+
+
+TEST_START IF ${TEST} == tumbleweed
+TEST_TYPE = test
+TEST = ${SSH} sh -c 'sleep infinity'
+BUILD_TYPE = useconfig:${KSOURCE_GIT}/stable/config/${ARCH}/default
+
+
+TEST_START IF ${TEST} == tumbleweed-only
+TEST_TYPE = test
+TEST = ${SSH} sh -c 'sleep infinity'
+BUILD_TYPE = useconfig:${KSOURCE_GIT}/stable/config/${ARCH}/default
+ADD_CONFIG =
+
+
+TEST_START IF ${TEST} == sle16
+TEST_TYPE = test
+TEST = ${SSH} sh -c 'sleep infinity'
+BUILD_TYPE = useconfig:${KSOURCE_GIT}/SL-16.0/config/${ARCH}/default
+ADD_CONFIG =
+
+
+TEST_START IF ${TEST} == stress_reuseport_listen_sh
+TEST_TYPE = test
+TEST_BIN = ./stress_reuseport_listen.sh
+PATTERN = exec of "./stress_reuseport_listen" failed: No such file or directory
+TEST = ${DO_TEST_PATTERN_FAIL}
+
+
+TEST_START IF ${TEST} == rtnetlink_sh
+TEST_TYPE = test
+TEST_BIN = ./rtnetlink.sh
+TEST = ${DO_TEST_SIMPLE}

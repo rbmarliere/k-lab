@@ -1,0 +1,28 @@
+#!/bin/bash -eu
+
+SUSE_VERSION=${SUSE_VERSION-}
+SUSE_PATCHLEVEL=${SUSE_PATCHLEVEL-}
+
+OUTPUT="$TMP_DIR"/suse-min.config
+touch "$OUTPUT"
+
+if [[ -n $SUSE_VERSION || -n $SUSE_PATCHLEVEL ]]; then
+	if [[ -z $SUSE_VERSION || -z $SUSE_PATCHLEVEL ]]; then
+		echo "ERROR: SUSE_VERSION and SUSE_PATCHLEVEL must be set together" >&2
+		exit 1
+	fi
+
+	"$BUILD_DIR"/scripts/config \
+		--file "$OUTPUT" \
+		--enable SUSE_PRODUCT_SLE \
+		--set-val SUSE_VERSION "$SUSE_VERSION" \
+		--set-val SUSE_PATCHLEVEL "$SUSE_PATCHLEVEL" \
+		--disable SUSE_KERNEL_SUPPORTED \
+		--disable SUSE_HAVE_STABLE_KABI
+else
+	"$BUILD_DIR"/scripts/config \
+		--file "$OUTPUT" \
+		--enable SUSE_PRODUCT_OPENSUSE_TUMBLEWEED
+fi
+
+"$BUILD_DIR"/scripts/config --file "$OUTPUT" --set-str MODULE_SIG_KEY "certs/signing_key.pem"

@@ -1,0 +1,43 @@
+#!/bin/bash -eu
+
+build_options=${BUILD_OPTIONS-}
+for arg in "$@"; do
+	case "$arg" in
+	clean | mrproper | distclean)
+		build_options=
+		break
+		;;
+	esac
+done
+
+cmd=(make)
+if [[ -n $build_options ]]; then
+	cmd+=("$build_options")
+fi
+cmd+=(-C "$BUILD_DIR" O="$OUTPUT_DIR")
+if [[ -n ${ARCH-} ]]; then
+	cmd+=("ARCH=$ARCH")
+fi
+if [[ ${BUILD_IN_ROOT:-0} != 1 ]] && [[ -n ${CROSS_COMPILE-} ]]; then
+	cmd+=("CROSS_COMPILE=$CROSS_COMPILE")
+fi
+
+has_modules_install=0
+for arg in "$@"; do
+	if [[ $arg == modules_install ]]; then
+		has_modules_install=1
+		break
+	fi
+done
+
+if [[ ${BUILD_IN_ROOT:-0} != 1 ]] && [[ -n ${ROOT-} ]] && ((has_modules_install)) && "$BIN"/cross is-foreign "${ARCH:-x86_64}"; then
+	exec "${cmd[@]}" INSTALL_MOD_PATH="$ROOT" "$@"
+fi
+
+cmd+=("$@")
+
+if ((has_modules_install)); then
+	exec "$BIN"/rootfs/run "${cmd[@]}"
+fi
+
+exec "$BIN"/rootfs/run --as-user "${cmd[@]}"

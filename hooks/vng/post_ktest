@@ -1,0 +1,3 @@
+#!/bin/bash -eu
+
+"$BIN"/vng/stop-vm -f

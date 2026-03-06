@@ -1,0 +1,5 @@
+#!/bin/bash -eu
+
+[[ -n ${ROOT-} ]] || exit 0
+
+"$BIN"/rootfs/mount
