@@ -1,9 +1,9 @@
 #!/bin/bash -eu
 
 THIS_DIR=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")
-PROJECT_DIR=$(realpath -- "$THIS_DIR/..")
-export BIN=$THIS_DIR
-export HOOKS=${HOOKS:-$PROJECT_DIR/hooks}
+
+# shellcheck disable=SC1091
+source "$THIS_DIR/../env.sh"
 
 while [[ $# -gt 0 ]]; do
 	case "$1" in
@@ -14,14 +14,21 @@ while [[ $# -gt 0 ]]; do
 	*=*)
 		key=${1%%=*}
 		val=${1#*=}
+		if [[ $val == '$'{*'}' ]]; then
+			val=
+		fi
+		if [[ $key == ROOT && $val == 0 ]]; then
+			val=
+		fi
 		if [[ $key == ROOT && -n $val ]]; then
-			# avoids mount/umount issues if $ROOT is a symlink
-			if root_real=$(realpath -- "$val" 2>/dev/null); then
-				val=$root_real
-			fi
+			ROOT=$val
+			resolve_root || exit 1
+			val=$ROOT
 		fi
 		if [[ -n $val ]]; then
 			export "$key=$val"
+		else
+			unset "$key"
 		fi
 		shift
 		;;

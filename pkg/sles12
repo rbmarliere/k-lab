@@ -1,0 +1,15 @@
+# Intentionally partial. Extend only for SLES12 flows we actually use.
+bc bc
+binutils binutils-devel
+bison bison
+flex flex
+gcc gcc7
+gxx gcc7-c++
+libdw libdw-devel
+libelf libelf-devel
+libssl libopenssl-devel
+make make
+rsync rsync
+ssh openssh
+tar tar
+vim vim

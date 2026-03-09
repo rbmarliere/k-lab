@@ -1,13 +1,17 @@
 #!/bin/bash -eu
 
+THIS_DIR=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")
+
+# shellcheck disable=SC1091
+source "$THIS_DIR/../../env.sh"
+
 die() {
 	echo "ERROR: $*" >&2
 	exit 1
 }
 
-if [[ $# -eq 0 ]]; then
-	die "missing command"
-fi
+[[ $# -gt 0 ]] || die "missing command"
+resolve_root || exit 1
 
 env_args=(
 	PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -31,16 +35,10 @@ if [[ -n ${LC_ALL-} ]]; then
 	env_args+=(LC_ALL="$LC_ALL")
 fi
 
-# Start with a minimal explicit environment inside the rootfs instead of
-# rebuilding argv into shell text or inheriting the full host environment.
-# Commands always run as uid 0 inside the user namespace with a root-style
-# login environment.
-exec unshare \
-	--map-root-user \
-	--map-auto \
-	--mount \
-	--root "$ROOT" \
-	-- \
-	env -i \
-	"${env_args[@]}" \
-	"$@"
+# Keep the environment explicit and run the command via a real host-root
+# chroot so package managers see normal rootfs ownership semantics.
+if [[ $(id -u) -eq 0 ]]; then
+	exec chroot "$ROOT" /usr/bin/env -i "${env_args[@]}" "$@"
+fi
+
+exec sudo -n -- chroot "$ROOT" /usr/bin/env -i "${env_args[@]}" "$@"

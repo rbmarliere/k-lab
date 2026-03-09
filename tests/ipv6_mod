@@ -4,7 +4,7 @@ DEFAULTS OVERRIDE
 DEPS := ${DEPS} tcpdump libnuma python-yaml python-jsonschema iperf
 INSTALL_DEPS = ${DEPS}
 AUTO_INSTALL_DEPS = 1
-VNG_PORT = 23000
+VNG_PORT := 23000
 VNG_ARGS = --user root
 ADD_CONFIG = ${BUILD_DIR}/tools/testing/selftests/net/config
 DIE_ON_FAILURE = 0
@@ -15,7 +15,7 @@ TEST_NAME = ipv6_y
 TEST_TYPE = patchcheck
 CHECKOUT = ipv6_mod
 PATCHCHECK_TYPE = build
-PATCHCHECK_START = HEAD~8
+PATCHCHECK_START = HEAD~10
 ADD_CONFIG = ${BUILD_DIR}/tools/testing/selftests/net/config ${CONFIG_DIR}/ipv6=y.config
 
 TEST_START
@@ -23,7 +23,7 @@ TEST_NAME = ipv6_n
 TEST_TYPE = patchcheck
 CHECKOUT = ipv6_mod
 PATCHCHECK_TYPE = build
-PATCHCHECK_START = HEAD~8
+PATCHCHECK_START = HEAD~10
 ADD_CONFIG = ${BUILD_DIR}/tools/testing/selftests/net/config ${CONFIG_DIR}/ipv6=n.config
 
 TEST_START

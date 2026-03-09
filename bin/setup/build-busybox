@@ -1,0 +1,417 @@
+#!/bin/bash -eu
+
+THIS_DIR=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")
+PROJECT_DIR=$(realpath -- "$THIS_DIR/../..")
+BUSYBOX_COMMIT=89f37ebe8c7f
+BUSYBOX_CFG=$THIS_DIR/busybox.config
+
+# shellcheck disable=SC1091
+source "$PROJECT_DIR/env.sh"
+require_setup_conf
+
+BUSYBOX_SRC_DIR=$BUSYBOX_DIR
+
+die() {
+	echo "ERROR: $*" >&2
+	exit 1
+}
+
+usage() {
+	cat <<EOF
+usage: $(basename -- "$0") [arch ...]
+
+Build static busybox binaries for foreign-arch virtme-ng runs.
+
+If no architectures are specified, all supported foreign architectures are built:
+  arm64 arm powerpc s390 riscv
+EOF
+}
+
+warnings=()
+
+warn() {
+	local message=$*
+
+	if [[ -n ${SETUP_WARNINGS_FILE-} ]]; then
+		printf '%s\n' "$message" >>"$SETUP_WARNINGS_FILE"
+		return 0
+	fi
+
+	warnings+=("$message")
+}
+
+print_warnings() {
+	local warning
+
+	[[ ${#warnings[@]} -gt 0 ]] || return 0
+
+	printf '\nBusybox setup warnings:\n' >&2
+	for warning in "${warnings[@]}"; do
+		printf '  - %s\n' "$warning" >&2
+	done
+}
+
+maybe_install_rpm() {
+	local pkg=$1
+
+	command -v rpm >/dev/null 2>&1 || return 0
+	command -v zypper >/dev/null 2>&1 || return 0
+
+	if ! rpm -q "$pkg" &>/dev/null; then
+		sudo zypper install -y "$pkg" || die "failed to install package: $pkg"
+	fi
+}
+
+cross_compile_default() {
+	case "$1" in
+	arm64)
+		printf '%s\n' /usr/bin/aarch64-suse-linux-
+		;;
+	arm)
+		printf '%s\n' /usr/bin/arm-suse-linux-gnueabi-
+		;;
+	powerpc)
+		printf '%s\n' /usr/bin/powerpc64le-suse-linux-
+		;;
+	s390)
+		printf '%s\n' /usr/bin/s390x-suse-linux-
+		;;
+	riscv)
+		printf '%s\n' /usr/bin/riscv64-suse-linux-
+		;;
+	*)
+		die "unsupported busybox ARCH: $1"
+		;;
+	esac
+}
+
+normalize_arch() {
+	case "${1-}" in
+	aarch64 | arm64)
+		printf '%s\n' arm64
+		;;
+	arm | armhf)
+		printf '%s\n' arm
+		;;
+	powerpc | ppc64 | ppc64el | ppc64le)
+		printf '%s\n' powerpc
+		;;
+	s390 | s390x)
+		printf '%s\n' s390
+		;;
+	riscv | riscv64)
+		printf '%s\n' riscv
+		;;
+	*)
+		die "unsupported busybox ARCH: $1"
+		;;
+	esac
+}
+
+cross_compile_var() {
+	case "$1" in
+	arm64)
+		printf '%s\n' CROSS_COMPILE_ARM64
+		;;
+	arm)
+		printf '%s\n' CROSS_COMPILE_ARM
+		;;
+	powerpc)
+		printf '%s\n' CROSS_COMPILE_POWERPC
+		;;
+	s390)
+		printf '%s\n' CROSS_COMPILE_S390
+		;;
+	riscv)
+		printf '%s\n' CROSS_COMPILE_RISCV
+		;;
+	*)
+		die "unsupported busybox ARCH: $1"
+		;;
+	esac
+}
+
+cross_compile_value() {
+	local arch=$1
+	local key value
+
+	key=$(cross_compile_var "$arch")
+	value=$(read_setup_var "$key")
+	if [[ -n $value ]]; then
+		printf '%s\n' "$value"
+		return 0
+	fi
+
+	cross_compile_default "$arch"
+}
+
+compiler_package() {
+	case "$1" in
+	arm64)
+		printf '%s\n' cross-aarch64-gcc15
+		;;
+	arm)
+		printf '%s\n' cross-arm-gcc15
+		;;
+	powerpc)
+		printf '%s\n' cross-ppc64le-gcc15
+		;;
+	s390)
+		printf '%s\n' cross-s390x-gcc15
+		;;
+	riscv)
+		printf '%s\n' cross-riscv64-gcc15
+		;;
+	*)
+		die "unsupported busybox ARCH: $1"
+		;;
+	esac
+}
+
+glibc_package() {
+	case "$1" in
+	arm64)
+		printf '%s\n' cross-aarch64-glibc-devel
+		;;
+	arm)
+		printf '%s\n' cross-arm-linux-glibc-devel
+		;;
+	powerpc)
+		printf '%s\n' cross-ppc64le-glibc-devel
+		;;
+	s390)
+		printf '%s\n' cross-s390x-glibc-devel
+		;;
+	riscv)
+		printf '%s\n' cross-riscv64-glibc-devel
+		;;
+	*)
+		die "unsupported busybox ARCH: $1"
+		;;
+	esac
+}
+
+uses_default_cross_compile() {
+	local arch=$1
+
+	[[ $(cross_compile_value "$arch") == "$(cross_compile_default "$arch")" ]]
+}
+
+default_header_warning() {
+	local arch=$1
+	local compiler=$2
+	local glibc_pkg=$3
+
+	case "$arch" in
+	arm)
+		warn "skipping busybox build for $arch: $compiler cannot find libc header byteswap.h in /usr/arm-suse-linux-gnueabi/sys-root/usr/include. On this openSUSE toolchain, $glibc_pkg may already be installed but still does not provide the full glibc userspace header set needed for a static busybox build; set CROSS_COMPILE_ARM to a complete toolchain if you need 32-bit arm support"
+		;;
+	*)
+		warn "skipping busybox build for $arch: target libc headers missing for $compiler; install $glibc_pkg or set $(cross_compile_var "$arch") to a complete toolchain"
+		;;
+	esac
+}
+
+default_static_warning() {
+	local arch=$1
+	local compiler=$2
+	local glibc_pkg=$3
+
+	case "$arch" in
+	arm)
+		warn "skipping busybox build for $arch: $compiler cannot link statically against the default openSUSE arm sysroot. $glibc_pkg may already be installed, but this toolchain still lacks the static libc pieces needed for busybox; set CROSS_COMPILE_ARM to a complete toolchain if you need 32-bit arm support"
+		;;
+	*)
+		warn "skipping busybox build for $arch: target static libc files missing for $compiler; install $glibc_pkg or set $(cross_compile_var "$arch") to a complete toolchain"
+		;;
+	esac
+}
+
+check_header_support() {
+	local compiler=$1
+	local tmpdir=$2
+
+	cat >"$tmpdir/header.c" <<'EOF'
+#include <byteswap.h>
+int main(void)
+{
+	return 0;
+}
+EOF
+
+	"$compiler" -c "$tmpdir/header.c" -o "$tmpdir/header.o" >/dev/null 2>&1
+}
+
+check_static_link() {
+	local compiler=$1
+	local tmpdir=$2
+
+	cat >"$tmpdir/link.c" <<'EOF'
+int main(void)
+{
+	return 0;
+}
+EOF
+
+	"$compiler" -static "$tmpdir/link.c" -o "$tmpdir/link" >/dev/null 2>&1
+}
+
+ensure_toolchain() {
+	local arch=$1
+	local prefix=$2
+	local compiler glibc_pkg tmpdir
+
+	compiler=${prefix}gcc
+	glibc_pkg=$(glibc_package "$arch")
+
+	if uses_default_cross_compile "$arch"; then
+		maybe_install_rpm "$(compiler_package "$arch")"
+		maybe_install_rpm "$glibc_pkg"
+	fi
+
+	if [[ ! -x $compiler ]]; then
+		if uses_default_cross_compile "$arch"; then
+			warn "skipping busybox build for $arch: compiler not found: $compiler"
+			return 1
+		fi
+		die "compiler not found for $arch: $compiler"
+	fi
+
+	tmpdir=$(mktemp -d)
+	if ! check_header_support "$compiler" "$tmpdir"; then
+		rm -rf -- "$tmpdir"
+		if uses_default_cross_compile "$arch"; then
+			default_header_warning "$arch" "$compiler" "$glibc_pkg"
+			return 1
+		fi
+		die "target libc headers missing for $arch ($compiler); install $glibc_pkg or point CROSS_COMPILE at a complete toolchain"
+	fi
+	if ! check_static_link "$compiler" "$tmpdir"; then
+		rm -rf -- "$tmpdir"
+		if uses_default_cross_compile "$arch"; then
+			default_static_warning "$arch" "$compiler" "$glibc_pkg"
+			return 1
+		fi
+		die "target static libc files missing for $arch ($compiler); install $glibc_pkg or point CROSS_COMPILE at a complete toolchain"
+	fi
+	rm -rf -- "$tmpdir"
+}
+
+ensure_source_checkout() {
+	if [[ -d $BUSYBOX_SRC_DIR/.git ]]; then
+		if [[ $(git -C "$BUSYBOX_SRC_DIR" rev-parse HEAD) != "$BUSYBOX_COMMIT" ]]; then
+			git -C "$BUSYBOX_SRC_DIR" checkout "$BUSYBOX_COMMIT"
+		fi
+		return 0
+	fi
+
+	mkdir -p -- "$(dirname -- "$BUSYBOX_SRC_DIR")"
+	git clone --branch master https://git.busybox.net/busybox "$BUSYBOX_SRC_DIR"
+	git -C "$BUSYBOX_SRC_DIR" checkout "$BUSYBOX_COMMIT"
+}
+
+ensure_patch() {
+	local patch=$BUSYBOX_SRC_DIR/tc-no-TCA_CBQ.patch
+
+	if [[ -e $patch ]]; then
+		return 0
+	fi
+
+	cat >"$patch" <<'EOF'
+--- busybox-1.36.1/networking/tc.c.old	2023-01-03 15:14:43.000000000 +0100
++++ busybox-1.36.1/networking/tc.c	2024-03-14 10:04:19.733155657 +0100
+@@ -233,6 +233,7 @@
+ #endif
+ static int cbq_print_opt(struct rtattr *opt)
+ {
++#ifdef TCA_CBQ_MAX
+ 	struct rtattr *tb[TCA_CBQ_MAX+1];
+ 	struct tc_ratespec *r = NULL;
+ 	struct tc_cbq_lssopt *lss = NULL;
+@@ -320,6 +321,7 @@
+ 		}
+ 	}
+  done:
++#endif
+ 	return 0;
+ }
+
+EOF
+
+	git -C "$BUSYBOX_SRC_DIR" apply "$patch"
+}
+
+build_one() {
+	local arch=$1
+	local prefix target_dir
+
+	prefix=$(cross_compile_value "$arch")
+	if [[ -z $prefix ]]; then
+		printf 'Skipping busybox build for %s: CROSS_COMPILE not set\n' "$arch" >&2
+		return 0
+	fi
+
+	if ! ensure_toolchain "$arch" "$prefix"; then
+		return 0
+	fi
+
+	target_dir=$BUSYBOX_DIR/$arch
+	rm -rf -- "$target_dir"
+
+	(
+		cd "$BUSYBOX_SRC_DIR"
+		export CROSS_COMPILE=$prefix
+
+		make -j"$(nproc)" clean
+		rm -f .config
+		cp "$BUSYBOX_CFG" .config
+		sed -i "s|^CONFIG_PREFIX=.*|CONFIG_PREFIX=\"$target_dir\"|" .config
+		make -j"$(nproc)" oldconfig
+		make -j"$(nproc)" busybox
+		make -j"$(nproc)" install
+	)
+}
+
+build_all_arches() {
+	printf '%s\n' arm64 arm powerpc s390 riscv
+}
+
+resolve_arches() {
+	local arch resolved
+	local -a arches=()
+
+	if [[ $# -eq 0 ]]; then
+		mapfile -t arches < <(build_all_arches)
+		printf '%s\n' "${arches[@]}"
+		return 0
+	fi
+
+	for arch in "$@"; do
+		resolved=$(normalize_arch "$arch")
+		if [[ " ${arches[*]} " != *" $resolved "* ]]; then
+			arches+=("$resolved")
+		fi
+	done
+
+	printf '%s\n' "${arches[@]}"
+}
+
+case "${1-}" in
+-h | --help | help)
+	usage
+	exit 0
+	;;
+esac
+
+[[ -r $BUSYBOX_CFG ]] || die "missing busybox config: $BUSYBOX_CFG"
+
+maybe_install_rpm glibc-devel-static
+ensure_source_checkout
+ensure_patch
+
+mkdir -p -- "$BUSYBOX_DIR"
+while IFS= read -r arch; do
+	build_one "$arch"
+done < <(resolve_arches "$@")
+
+print_warnings

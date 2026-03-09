@@ -1,5 +1,24 @@
 #!/bin/bash -eu
 
+THIS_DIR=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")
+
+# shellcheck disable=SC1091
+source "$THIS_DIR/../../env.sh"
+
+cleanup_needed=
+cleanup() {
+	local rc=$?
+
+	if [[ -n $cleanup_needed ]]; then
+		"$BIN"/rootfs/umount >/dev/null 2>&1 || true
+	fi
+
+	exit $rc
+}
+trap cleanup EXIT
+
+resolve_root || exit 1
+
 if [[ ! -d $ROOT ]]; then
 	echo "ERROR: $ROOT directory does not exist, exiting..."
 	exit 1
@@ -16,14 +35,22 @@ if [[ -n $mounted_under_root ]]; then
 fi
 
 "$BIN"/run --host --as-root mount -t proc proc "$ROOT"/proc
+cleanup_needed=1
 "$BIN"/run --host --as-root mount --rbind /dev "$ROOT"/dev
 "$BIN"/run --host --as-root mount --make-rslave "$ROOT"/dev
 "$BIN"/run --host --as-root mount --rbind /sys "$ROOT"/sys
 "$BIN"/run --host --as-root mount --make-rslave "$ROOT"/sys
 
-touch "$ROOT/etc/resolv.conf"
+"$BIN"/run --host --as-root touch "$ROOT/etc/resolv.conf"
 "$BIN"/run --host --as-root mount --bind /etc/resolv.conf "$ROOT"/etc/resolv.conf
 "$BIN"/run --host --as-root mount -o remount,bind,ro /etc/resolv.conf "$ROOT"/etc/resolv.conf
 
-"$BIN"/run --host --as-root mount --mkdir --bind "$OUTPUT_DIR" "$ROOT$OUTPUT_DIR"
-"$BIN"/run --host --as-root mount --mkdir --bind "$BUILD_DIR" "$ROOT$BUILD_DIR"
+if [[ -n ${OUTPUT_DIR-} ]]; then
+	"$BIN"/run --host --as-root mount --mkdir --bind "$OUTPUT_DIR" "$ROOT$OUTPUT_DIR"
+fi
+
+if [[ -n ${BUILD_DIR-} ]]; then
+	"$BIN"/run --host --as-root mount --mkdir --bind "$BUILD_DIR" "$ROOT$BUILD_DIR"
+fi
+
+cleanup_needed=

@@ -22,6 +22,8 @@ python-jsonschema python3-jsonschema
 python-yaml python3-PyYAML
 rsync rsync
 scapy scapy
+ssh openssh
 tar tar
 tcpdump tcpdump
+vim vim
 xxd xxd

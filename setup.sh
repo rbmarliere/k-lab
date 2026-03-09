@@ -11,28 +11,32 @@ die() {
 if ! source "$THIS_DIR/env.sh"; then
 	exit 1
 fi
-
-bootstrap_vng() {
-	if [[ -e $VNG_DIR && ! -d $VNG_DIR ]]; then
-		die "VNG_DIR exists but is not a directory: $VNG_DIR"
-	fi
-
-	if [[ ! -d $VNG_DIR ]]; then
-		mkdir -p -- "$(dirname -- "$VNG_DIR")"
-		git clone --single-branch https://github.com/arighi/virtme-ng "$VNG_DIR"
-	fi
-
-	if [[ ! -f $VNG_DIR/Makefile ]]; then
-		die "virtme-ng checkout looks incomplete: $VNG_DIR"
-	fi
-	make -C "$VNG_DIR"
-}
-
-if ! command -v make >/dev/null 2>&1; then
-	die "missing required command: make"
+if ! require_linux_git; then
+	exit 1
 fi
 
-bootstrap_vng
+link_ktest() {
+	local target=$LINUX_GIT/tools/testing/ktest
+
+	[[ -d $target ]] || die "missing ktest directory: $target"
+	mkdir -p -- "$TOOLS_DIR"
+
+	if [[ -e $KTEST_DIR && ! -L $KTEST_DIR ]]; then
+		die "KTEST_DIR exists but is not a symlink: $KTEST_DIR"
+	fi
+
+	ln -sfn -- "$target" "$KTEST_DIR"
+}
+
+for cmd in git ln make; do
+	if ! command -v "$cmd" >/dev/null 2>&1; then
+		die "missing required command: $cmd"
+	fi
+done
+
+mkdir -p -- "$TOOLS_DIR"
+link_ktest
+"$THIS_DIR"/bin/setup/build-vng
 cat <<EOF
 
 Setup complete.
@@ -41,4 +45,10 @@ Load the kt shell wrapper and completion with:
   source "$THIS_DIR/kt.completion"
 
 Add that line to your shell rc file if you want it by default.
+
+If you want foreign-arch ROOT support in virtme-ng, build the matching static
+busybox binary explicitly, for example:
+  $THIS_DIR/bin/setup/build-busybox arm64
+
+Run '$THIS_DIR/bin/setup/build-busybox --help' for details.
 EOF

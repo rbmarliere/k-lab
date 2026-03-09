@@ -1,0 +1,391 @@
+#!/bin/bash -eu
+
+THIS_DIR=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")
+
+# shellcheck disable=SC1091
+source "$THIS_DIR/../env.sh"
+
+die() {
+	echo "ERROR: $*" >&2
+	exit 1
+}
+
+normalize_arch() {
+	case "${1-}" in
+	"" | x86_64 | amd64 | x86)
+		printf '%s\n' x86_64
+		;;
+	aarch64 | arm64)
+		printf '%s\n' arm64
+		;;
+	arm | armhf)
+		printf '%s\n' arm
+		;;
+	powerpc | ppc64 | ppc64el | ppc64le)
+		printf '%s\n' powerpc
+		;;
+	s390 | s390x)
+		printf '%s\n' s390
+		;;
+	riscv | riscv64)
+		printf '%s\n' riscv
+		;;
+	*)
+		die "unsupported architecture: $1"
+		;;
+	esac
+}
+
+normalize_root() {
+	case "${1-}" in
+	"" | 0)
+		printf '%s\n' ""
+		;;
+	*)
+		printf '%s\n' "$1"
+		;;
+	esac
+}
+
+build_target() {
+	local arch
+
+	arch=$(normalize_arch "$1")
+	case "$arch" in
+	x86_64)
+		printf '%s\n' arch/x86/boot/bzImage
+		;;
+	arm64)
+		printf '%s\n' arch/arm64/boot/Image
+		;;
+	arm)
+		printf '%s\n' arch/arm/boot/zImage
+		;;
+	powerpc)
+		printf '%s\n' vmlinux
+		;;
+	s390)
+		printf '%s\n' arch/s390/boot/bzImage
+		;;
+	riscv)
+		printf '%s\n' arch/riscv/boot/Image
+		;;
+	esac
+}
+
+cross_compile_var() {
+	case "$1" in
+	arm64)
+		printf '%s\n' CROSS_COMPILE_ARM64
+		;;
+	arm)
+		printf '%s\n' CROSS_COMPILE_ARM
+		;;
+	powerpc)
+		printf '%s\n' CROSS_COMPILE_POWERPC
+		;;
+	s390)
+		printf '%s\n' CROSS_COMPILE_S390
+		;;
+	riscv)
+		printf '%s\n' CROSS_COMPILE_RISCV
+		;;
+	*)
+		die "unsupported cross-compile architecture: $1"
+		;;
+	esac
+}
+
+cross_compile_default() {
+	case "$1" in
+	arm64)
+		printf '%s\n' /usr/bin/aarch64-suse-linux-
+		;;
+	arm)
+		printf '%s\n' /usr/bin/arm-suse-linux-gnueabi-
+		;;
+	powerpc)
+		printf '%s\n' /usr/bin/powerpc64le-suse-linux-
+		;;
+	s390)
+		printf '%s\n' /usr/bin/s390x-suse-linux-
+		;;
+	riscv)
+		printf '%s\n' /usr/bin/riscv64-suse-linux-
+		;;
+	*)
+		die "unsupported cross-compile architecture: $1"
+		;;
+	esac
+}
+
+cross_compile() {
+	local arch key value
+
+	arch=$(normalize_arch "$1")
+	case "$arch" in
+	x86_64)
+		printf '%s\n' ""
+		return 0
+		;;
+	esac
+
+	key=$(cross_compile_var "$arch")
+	value=$(read_setup_var "$key" || true)
+	if [[ -n $value ]]; then
+		printf '%s\n' "$value"
+		return 0
+	fi
+
+	cross_compile_default "$arch"
+}
+
+vng_arch() {
+	local arch
+
+	arch=$(normalize_arch "$1")
+	case "$arch" in
+	x86_64)
+		printf '%s\n' amd64
+		;;
+	arm64)
+		printf '%s\n' arm64
+		;;
+	arm)
+		printf '%s\n' armhf
+		;;
+	powerpc)
+		printf '%s\n' ppc64el
+		;;
+	s390)
+		printf '%s\n' s390x
+		;;
+	riscv)
+		printf '%s\n' riscv64
+		;;
+	esac
+}
+
+busybox_path() {
+	local arch
+
+	arch=$(normalize_arch "$1")
+	printf '%s\n' "$TOOLS_DIR/busybox/$arch/bin/busybox"
+}
+
+probe_root_elf() {
+	local root=$1
+	local rel path real
+
+	[[ -n $root ]] || return 1
+	[[ -d $root ]] || die "ROOT is not a directory: $root"
+
+	for rel in /bin/sh /usr/bin/env /bin/bash /usr/bin/bash /lib/systemd/systemd /sbin/init; do
+		path=$root$rel
+		[[ -e $path ]] || continue
+
+		real=$path
+		if ! real=$(readlink -f -- "$path" 2>/dev/null); then
+			real=$path
+		fi
+
+		[[ -f $real ]] || continue
+		if readelf -h -- "$real" >/dev/null 2>&1; then
+			printf '%s\n' "$real"
+			return 0
+		fi
+	done
+
+	die "unable to find an ELF userspace binary under ROOT=$root"
+}
+
+root_arch() {
+	local root=$1
+	local elf machine data
+
+	root=$(normalize_root "$root")
+	[[ -n $root ]] || return 0
+	elf=$(probe_root_elf "$root")
+
+	machine=$(
+		readelf -h -- "$elf" | awk -F: '
+			$1 ~ /Machine/ {
+				gsub(/^[[:space:]]+/, "", $2)
+				print $2
+				exit
+			}
+		'
+	)
+	data=$(
+		readelf -h -- "$elf" | awk -F: '
+			$1 ~ /Data/ {
+				gsub(/^[[:space:]]+/, "", $2)
+				print $2
+				exit
+			}
+		'
+	)
+
+	case "$machine" in
+	"Advanced Micro Devices X86-64")
+		printf '%s\n' x86_64
+		;;
+	AArch64)
+		printf '%s\n' arm64
+		;;
+	ARM)
+		printf '%s\n' arm
+		;;
+	PowerPC64)
+		case "$data" in
+		*little\ endian*)
+			printf '%s\n' powerpc
+			;;
+		*)
+			die "unsupported PowerPC rootfs endianness under ROOT=$root"
+			;;
+		esac
+		;;
+	"IBM S/390")
+		printf '%s\n' s390
+		;;
+	RISC-V)
+		printf '%s\n' riscv
+		;;
+	*)
+		die "unsupported ROOT architecture '$machine' under ROOT=$root"
+		;;
+	esac
+}
+
+resolve_arch() {
+	local root=${1-}
+	local arch=${2-}
+
+	root=$(normalize_root "$root")
+
+	if [[ -n $arch ]]; then
+		normalize_arch "$arch"
+		return 0
+	fi
+
+	if [[ -n $root ]]; then
+		root_arch "$root"
+		return 0
+	fi
+
+	printf '%s\n' x86_64
+}
+
+is_foreign() {
+	local arch
+
+	arch=$(normalize_arch "$1")
+	[[ $arch != x86_64 ]]
+}
+
+preflight_root() {
+	local root=${1-}
+	local arch=${2-}
+	local detected
+
+	root=$(normalize_root "$root")
+	[[ -n $root ]] || return 0
+	[[ -d $root ]] || die "ROOT is not a directory: $root"
+
+	detected=$(root_arch "$root")
+	if [[ -n $arch ]]; then
+		arch=$(normalize_arch "$arch")
+		if [[ $arch != "$detected" ]]; then
+			die "ARCH=$arch does not match ROOT=$root ($detected)"
+		fi
+	else
+		arch=$detected
+	fi
+
+	if is_foreign "$arch"; then
+		if ! sudo -n -- chroot "$root" /bin/sh -c 'true' >/dev/null 2>&1; then
+			die "foreign ROOT execution requires passwordless sudo plus binfmt_misc and qemu-user support on the host"
+		fi
+	fi
+}
+
+preflight_vng() {
+	local root=${1-}
+	local arch=${2-}
+	local busybox
+
+	root=$(normalize_root "$root")
+	arch=$(resolve_arch "$root" "$arch")
+
+	if is_foreign "$arch"; then
+		[[ -n $root ]] || die "ARCH=$arch requires ROOT for virtme-ng runs"
+		busybox=$(busybox_path "$arch")
+		[[ -x $busybox ]] || die "missing static busybox: $busybox (run $PROJECT_DIR/bin/setup/build-busybox $arch)"
+	fi
+}
+
+usage() {
+	cat <<'EOF'
+usage: cross <command> [args]
+
+commands:
+  build-target <arch>
+  busybox-path <arch>
+  cross-compile <arch>
+  is-foreign <arch>
+  preflight-root <root> [arch]
+  preflight-vng <root> [arch]
+  resolve-arch [root] [arch]
+  root-arch <root>
+  vng-arch <arch>
+EOF
+}
+
+cmd=${1-}
+shift || true
+
+case "$cmd" in
+build-target)
+	[[ $# -eq 1 ]] || die "usage: cross build-target <arch>"
+	build_target "$1"
+	;;
+busybox-path)
+	[[ $# -eq 1 ]] || die "usage: cross busybox-path <arch>"
+	busybox_path "$1"
+	;;
+cross-compile)
+	[[ $# -eq 1 ]] || die "usage: cross cross-compile <arch>"
+	cross_compile "$1"
+	;;
+is-foreign)
+	[[ $# -eq 1 ]] || die "usage: cross is-foreign <arch>"
+	is_foreign "$1"
+	;;
+preflight-root)
+	[[ $# -ge 1 && $# -le 2 ]] || die "usage: cross preflight-root <root> [arch]"
+	preflight_root "${1-}" "${2-}"
+	;;
+preflight-vng)
+	[[ $# -ge 0 && $# -le 2 ]] || die "usage: cross preflight-vng [root] [arch]"
+	preflight_vng "${1-}" "${2-}"
+	;;
+resolve-arch)
+	[[ $# -ge 0 && $# -le 2 ]] || die "usage: cross resolve-arch [root] [arch]"
+	resolve_arch "${1-}" "${2-}"
+	;;
+root-arch)
+	[[ $# -eq 1 ]] || die "usage: cross root-arch <root>"
+	root_arch "$1"
+	;;
+vng-arch)
+	[[ $# -eq 1 ]] || die "usage: cross vng-arch <arch>"
+	vng_arch "$1"
+	;;
+"" | -h | --help | help)
+	usage
+	;;
+*)
+	die "unknown command: $cmd"
+	;;
+esac

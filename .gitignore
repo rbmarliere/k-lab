@@ -1,3 +1,5 @@
 config/*
 tmp/*
+tools/*
+!tools/.gitkeep
 virtme-ng

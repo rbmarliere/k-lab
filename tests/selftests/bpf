@@ -2,7 +2,7 @@ INCLUDE ../../include/defaults.conf
 
 DEFAULTS OVERRIDE
 POST_BUILD_APPEND = ${RUN_HOOK} ${THIS_DIR}/hooks/selftests/bpf/post_build
-DEPS := ${DEPS} clang lld llvm llvm-dev xxd
+DEPS := ${DEPS} dwarves libcap libdw libdwarf python-docutils clang lld llvm llvm-dev xxd
 INSTALL_DEPS = ${DEPS}
 AUTO_INSTALL_DEPS = 1
 TEST_DIR = ${OUTPUT_DIR}/kselftest/kselftest_install/bpf
@@ -17,10 +17,10 @@ BUILD_TYPE = defconfig
 
 #INCLUDE ../../include/suse.conf
 #BUILD_TYPE = useconfig:${KSOURCE_GIT}/stable/config/x86_64/default
-#ROOT = /roots/suse/Tumbleweed/vm-x86_64
+#ROOT := /roots/suse/Tumbleweed/vm-x86_64
 
 #BUILD_TYPE = useconfig:${KSOURCE_GIT}/SL-16.0/main/config/x86_64/default
-#ROOT = /roots/suse/16.0/vm-x86_64
+#ROOT := /roots/suse/16.0/vm-x86_64
 #SUSE_VERSION=16
 #SUSE_PATCHLEVEL=0
 #VNG_PORT := 22010

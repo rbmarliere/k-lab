@@ -1,7 +1,7 @@
-MACHINE = builder
-
 INCLUDE ../include/base.conf
 INCLUDE ../include/rootfs.conf
+INCLUDE ../include/cross.conf
+INCLUDE ../include/paths.conf
 INCLUDE ../include/setenv.conf
 
 DEFAULTS OVERRIDE

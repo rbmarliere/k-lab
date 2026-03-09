@@ -1,0 +1,76 @@
+#!/bin/bash -eu
+
+THIS_DIR=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")
+
+# shellcheck disable=SC1091
+source "$THIS_DIR/../../env.sh"
+
+die() {
+	echo "ERROR: $*" >&2
+	exit 1
+}
+
+usage() {
+	cat <<'EOF'
+usage: min-config <output> [arch ...]
+EOF
+}
+
+collect_arches() {
+	local arch
+	declare -A seen=()
+
+	if [[ $# -gt 0 ]]; then
+		for arch in "$@"; do
+			[[ -n $arch ]] || continue
+			if [[ -n ${seen["$arch"]+x} ]]; then
+				continue
+			fi
+			seen["$arch"]=1
+			printf '%s\n' "$arch"
+		done
+		return 0
+	fi
+
+	while IFS= read -r arch; do
+		[[ -n $arch ]] || continue
+		if [[ -n ${seen["$arch"]+x} ]]; then
+			continue
+		fi
+		seen["$arch"]=1
+		printf '%s\n' "$arch"
+	done
+}
+
+generate_min_config() {
+	local output=$1
+	shift
+
+	local tmp_output=${output}.new
+	local arch
+	local vng_args
+
+	: >"$tmp_output"
+	while IFS= read -r arch; do
+		vng_args=()
+		if "$BIN"/cross is-foreign "$arch"; then
+			vng_args=(--arch "$("$BIN"/cross vng-arch "$arch")")
+		fi
+
+		"$BIN"/vng/cmd "${vng_args[@]}" --kconfig --dry-run --configitem MODULES=y |
+			awk '/^CONFIG_[A-Za-z0-9_]+=/' >>"$tmp_output"
+	done < <(collect_arches "$@")
+
+	sort -u "$tmp_output" >"$output"
+	rm -f "$tmp_output"
+}
+
+case "${1-}" in
+"" | -h | --help | help)
+	usage
+	;;
+*)
+	[[ $# -ge 1 ]] || die "usage: min-config <output> [arch ...]"
+	generate_min_config "$@"
+	;;
+esac

@@ -1,4 +1,38 @@
 #!/bin/bash -eu
 
-cmd=(make "$BUILD_OPTIONS" -C "$BUILD_DIR" O="$OUTPUT_DIR" "$@")
-exec "$BIN"/rootfs/run "${cmd[@]}"
+cleanup_needed=
+cleanup() {
+	local rc=$?
+
+	if [[ -n $cleanup_needed ]]; then
+		"$BIN"/rootfs/umount >/dev/null 2>&1 || true
+	fi
+
+	exit $rc
+}
+trap cleanup EXIT
+
+cmd=(make "$BUILD_OPTIONS" -C "$BUILD_DIR" O="$OUTPUT_DIR")
+if [[ -n ${ARCH-} ]]; then
+	cmd+=("ARCH=$ARCH")
+fi
+if [[ ${BUILD_IN_ROOT:-0} != 1 ]] && [[ -n ${CROSS_COMPILE-} ]]; then
+	cmd+=("CROSS_COMPILE=$CROSS_COMPILE")
+fi
+
+has_modules_install=0
+for arg in "$@"; do
+	if [[ $arg == modules_install ]]; then
+		has_modules_install=1
+		break
+	fi
+done
+
+if [[ ${BUILD_IN_ROOT:-0} != 1 ]] && [[ -n ${ROOT-} ]] && ((has_modules_install)) && "$BIN"/cross is-foreign "${ARCH:-x86_64}"; then
+	exec "${cmd[@]}" INSTALL_MOD_PATH="$ROOT" "$@"
+fi
+
+cmd+=("$@")
+"$BIN"/rootfs/mount
+cleanup_needed=1
+"$BIN"/rootfs/run "${cmd[@]}"

@@ -10,6 +10,7 @@ done
 
 if [[ -n ${ROOT-} && $has_root -eq 0 ]]; then
 	set -- \
+		--force-9p \
 		--user root \
 		--root "$ROOT" \
 		--rw \
@@ -26,12 +27,13 @@ set -- \
 	--run "$OUTPUT_DIR" \
 	--network user \
 	--memory 4G \
-	--force-9p \
+	--ssh-tcp \
 	--ssh "$VNG_PORT" \
 	"$@"
 
 user_root=
 rootfs=()
+arch_args=()
 if [[ $has_root -eq 1 ]]; then
 	rootfs=(
 		unshare
@@ -43,14 +45,16 @@ if [[ $has_root -eq 1 ]]; then
 	user_root="--user root"
 fi
 
-if [[ $has_root -eq 1 ]]; then
-	echo "PATH=\"$VNG_DIR:$VNG_DIR/virtme/guest/bin:\$PATH\" ${rootfs[*]} vng $* --debug" >"$TMP_DIR"/vng.cmd
-else
-	echo "PATH=\"$VNG_DIR:$VNG_DIR/virtme/guest/bin:\$PATH\" vng $* --debug" >"$TMP_DIR"/vng.cmd
+if "$BIN"/cross is-foreign "${ARCH:-x86_64}"; then
+	"$BIN"/cross preflight-vng "${ROOT-}" "${ARCH-}"
+	arch_args+=(
+		--arch "$("$BIN"/cross vng-arch "${ARCH:-x86_64}")"
+		--busybox "$("$BIN"/cross busybox-path "${ARCH:-x86_64}")"
+	)
 fi
 
-echo "PATH=\"$VNG_DIR:$VNG_DIR/virtme/guest/bin:\$PATH\" vng $* --gdb" >"$TMP_DIR"/vng_gdb.cmd
-echo "PATH=\"$VNG_DIR:$VNG_DIR/virtme/guest/bin:\$PATH\" vng --ssh-client $VNG_PORT $user_root" >"$TMP_DIR"/vng_ssh.cmd
+echo "PATH=\"$VNG_DIR:$VNG_DIR/virtme/guest/bin:\$PATH\" ${rootfs[*]} vng ${arch_args[*]} $*" >"$TMP_DIR"/vng.cmd
+echo "PATH=\"$VNG_DIR:$VNG_DIR/virtme/guest/bin:\$PATH\" vng --ssh-tcp --ssh-client $VNG_PORT $user_root" >>"$TMP_DIR"/vng.cmd
 
-setsid "${rootfs[@]}" "$BIN"/vng/cmd "$@" -- sleep infinity </dev/null &>"$TMP_DIR"/vng.log &
+setsid "${rootfs[@]}" "$BIN"/vng/cmd "${arch_args[@]}" "$@" -- sleep infinity </dev/null &>"$TMP_DIR"/vng.log &
 echo $! >"$TMP_DIR"/vng.pid

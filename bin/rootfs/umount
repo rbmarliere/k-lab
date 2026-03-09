@@ -1,6 +1,12 @@
 #!/bin/bash -eu
 
+THIS_DIR=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")
+
+# shellcheck disable=SC1091
+source "$THIS_DIR/../../env.sh"
+
 [[ -n ${ROOT-} ]] || exit 0
+resolve_root || exit 1
 
 # unmount mountpoints under ROOT, deepest first
 ret=0

@@ -5,15 +5,26 @@ if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
 	exit 1
 fi
 
-this_dir=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")
-SETUP_CONF=$this_dir/setup.conf
-if [[ ! -r $SETUP_CONF ]]; then
-	echo "ERROR: unable to read setup config: $SETUP_CONF" >&2
+PROJECT_DIR=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")
+THIS_DIR=$PROJECT_DIR
+BIN=$PROJECT_DIR/bin
+SETUP_CONF=$PROJECT_DIR/setup.conf
+TOOLS_DIR=$THIS_DIR/tools
+KTEST_DIR=$TOOLS_DIR/ktest
+VNG_DIR=$TOOLS_DIR/virtme-ng
+BUSYBOX_DIR=$TOOLS_DIR/busybox
+
+export PROJECT_DIR THIS_DIR BIN SETUP_CONF TOOLS_DIR KTEST_DIR VNG_DIR BUSYBOX_DIR
+
+env_error() {
+	echo "ERROR: $*" >&2
 	return 1
-fi
+}
 
 read_setup_var() {
 	local key=$1
+
+	[[ -r $SETUP_CONF ]] || return 1
 
 	awk -v key="$key" '
 		$0 ~ /^[[:space:]]*#/ || $0 ~ /^[[:space:]]*$/ { next }
@@ -25,40 +36,90 @@ read_setup_var() {
 	' "$SETUP_CONF"
 }
 
-LINUX_GIT=$(read_setup_var LINUX_GIT)
-THIS_DIR=$(read_setup_var THIS_DIR)
+require_setup_conf() {
+	[[ -r $SETUP_CONF ]] || env_error "unable to read setup config: $SETUP_CONF"
+}
 
-for var in LINUX_GIT THIS_DIR; do
-	if [[ -z ${!var-} ]]; then
-		echo "ERROR: $var is not set in $SETUP_CONF" >&2
+load_setup_conf() {
+	local configured_this_dir configured_dir
+
+	if [[ -n ${_KLAB_SETUP_LOADED-} ]]; then
+		return 0
+	fi
+
+	require_setup_conf || return 1
+
+	LINUX_GIT=$(read_setup_var LINUX_GIT || true)
+	configured_this_dir=$(read_setup_var THIS_DIR || true)
+
+	if [[ -z ${LINUX_GIT-} ]]; then
+		env_error "LINUX_GIT is not set in $SETUP_CONF"
 		return 1
 	fi
-done
+	if [[ -z $configured_this_dir ]]; then
+		env_error "THIS_DIR is not set in $SETUP_CONF"
+		return 1
+	fi
 
-if ! configured_dir=$(realpath -- "$THIS_DIR" 2>/dev/null); then
-	echo "ERROR: THIS_DIR points to a missing directory: $THIS_DIR" >&2
-	return 1
-fi
-if [[ $configured_dir != "$this_dir" ]]; then
-	echo "ERROR: THIS_DIR in $SETUP_CONF is '$configured_dir', but this checkout is '$this_dir'" >&2
-	return 1
-fi
+	if ! configured_dir=$(realpath -- "$configured_this_dir" 2>/dev/null); then
+		env_error "THIS_DIR points to a missing directory: $configured_this_dir"
+		return 1
+	fi
+	if [[ $configured_dir != "$PROJECT_DIR" ]]; then
+		env_error "THIS_DIR in $SETUP_CONF is '$configured_dir', but this checkout is '$PROJECT_DIR'"
+		return 1
+	fi
 
-if [[ ! -d $LINUX_GIT ]]; then
-	echo "ERROR: LINUX_GIT points to a missing directory: $LINUX_GIT" >&2
-	return 1
-fi
-if ! git -C "$LINUX_GIT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-	echo "ERROR: LINUX_GIT is not a git worktree: $LINUX_GIT" >&2
-	return 1
-fi
+	KTEST_PL=$LINUX_GIT/tools/testing/ktest/ktest.pl
 
-KTEST_PL=$LINUX_GIT/tools/testing/ktest/ktest.pl
-if [[ ! -f $KTEST_PL ]]; then
-	echo "ERROR: missing ktest.pl: $KTEST_PL" >&2
-	return 1
-fi
+	export LINUX_GIT KTEST_PL
+	_KLAB_SETUP_LOADED=1
+	return 0
+}
 
-VNG_DIR=$THIS_DIR/virtme-ng
+require_linux_git() {
+	load_setup_conf || return 1
 
-export THIS_DIR KTEST_PL VNG_DIR
+	if [[ ! -d $LINUX_GIT ]]; then
+		env_error "LINUX_GIT points to a missing directory: $LINUX_GIT"
+		return 1
+	fi
+	if ! git -C "$LINUX_GIT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+		env_error "LINUX_GIT is not a git worktree: $LINUX_GIT"
+		return 1
+	fi
+
+	return 0
+}
+
+require_ktest() {
+	require_linux_git || return 1
+
+	if [[ ! -f $KTEST_PL ]]; then
+		env_error "missing ktest.pl: $KTEST_PL"
+		return 1
+	fi
+
+	return 0
+}
+
+require_vng() {
+	if [[ ! -d $VNG_DIR || ! -x $VNG_DIR/vng ]]; then
+		env_error "VNG_DIR is not ready: $VNG_DIR"
+		return 1
+	fi
+
+	return 0
+}
+
+resolve_root() {
+	[[ -n ${ROOT-} ]] || env_error "ROOT is not set" || return 1
+
+	if ! ROOT=$(realpath -- "$ROOT" 2>/dev/null); then
+		env_error "unable to resolve ROOT: $ROOT"
+		return 1
+	fi
+
+	export ROOT
+	return 0
+}

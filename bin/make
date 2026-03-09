@@ -1,7 +1,17 @@
 #!/bin/bash -eu
 
-if [[ -n ${ROOT-} ]]; then
-	exec "$BIN"/rootfs/make "$@"
-else
-	exec make "$BUILD_OPTIONS" O="$OUTPUT_DIR" "$@"
+make_cmd=(make "$BUILD_OPTIONS" -C "$BUILD_DIR" O="$OUTPUT_DIR")
+if [[ -n ${ARCH-} ]]; then
+	make_cmd+=("ARCH=$ARCH")
 fi
+if [[ -n ${CROSS_COMPILE-} ]]; then
+	make_cmd+=("CROSS_COMPILE=$CROSS_COMPILE")
+fi
+
+if [[ -n ${ROOT-} ]]; then
+	if [[ ${BUILD_IN_ROOT:-0} == 1 ]] || ! "$BIN"/cross is-foreign "${ARCH:-x86_64}"; then
+		exec "$BIN"/rootfs/make "$@"
+	fi
+fi
+
+exec "${make_cmd[@]}" "$@"
