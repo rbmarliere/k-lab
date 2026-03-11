@@ -1,3 +1,3 @@
 #!/bin/bash -eu
 
-ln -sfnT "$TMP_DIR" "$BUILD_DIR"/tmp
+ln -sfnT "$TMP_DIR" "$BUILD_DIR"/tmp-"$VNG_PORT"
