@@ -4,4 +4,4 @@ DEFAULTS OVERRIDE
 
 TEST_START
 TEST_TYPE = test
-TEST = ${SSH} sh -c 'sleep infinity'
+TEST = ${DO_TEST_SIMPLE}

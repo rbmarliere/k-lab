@@ -1,48 +1,23 @@
-ROOT := /roots/suse/Tumbleweed/vm-x86_64
-
-#ROOT := /roots/suse/16.0/vm-x86_64
-#SUSE_VERSION = 16
-#SUSE_PATCHLEVEL = 0
-
-INCLUDE ../../include/suse.conf
+INCLUDE ../../include/defaults.conf
 
 DEFAULTS OVERRIDE
-VNG_ARGS = --user root
-POST_BUILD_APPEND = ${RUN_HOOK} ${THIS_DIR}/hooks/selftests/bpf/post_build
-DEPS = gxx dwarves libdwarf python3-docutils clang lld llvm llvm-dev xxd
-TEST_DIR = ${OUTPUT_DIR}/kselftest/kselftest_install/bpf
+
+TEST_DIR = ${OUTPUT_DIR}/kselftest/kselftest_install
 PREP_TEST = mount bpffs /sys/fs/bpf -t bpf && cd ${TEST_DIR} &&
+
+VNG_ARGS = --user root
+
+POST_BUILD_APPEND = ${RUN_HOOK} ${THIS_DIR}/hooks/selftests/bpf/post_build
+
+DEPS = gxx dwarves libdwarf python3-docutils clang lld llvm llvm-dev xxd
 
 ADD_CONFIG = ${BUILD_DIR}/tools/testing/selftests/bpf/config ${BUILD_DIR}/tools/testing/selftests/bpf/config.${ARCH}
 
 
-TEST := default
-
-TEST_START IF ${TEST} == default
+TEST_START IF ${TEST} == all
 TEST_TYPE = test
-TEST = ${SSH} sh -c 'sleep infinity'
-BUILD_TYPE = defconfig
-
-
-TEST_START IF ${TEST} == tumbleweed
-TEST_TYPE = test
-TEST = ${SSH} sh -c 'sleep infinity'
-BUILD_TYPE = useconfig:${KSOURCE_GIT}/stable/config/${ARCH}/default
-
-
-TEST_START IF ${TEST} == tumbleweed-only
-TEST_TYPE = test
-TEST = ${SSH} sh -c 'sleep infinity'
-BUILD_TYPE = useconfig:${KSOURCE_GIT}/stable/config/${ARCH}/default
-ADD_CONFIG =
-
-
-TEST_START IF ${TEST} == sle16
-TEST_TYPE = test
-TEST = ${SSH} sh -c 'sleep infinity'
-BUILD_TYPE = useconfig:${KSOURCE_GIT}/SL-16.0/config/${ARCH}/default
-ADD_CONFIG =
-
+TEST_BIN = ./run_kselftest.sh -c bpf
+TEST = ${DO_TEST_SIMPLE}
 
 
 TEST_START IF ${TEST} == config-bisect
@@ -50,7 +25,7 @@ TEST_TYPE = config_bisect
 CONFIG_BISECT_TYPE = test
 CONFIG_BISECT = ${CONFIG_DIR}/bpf_bad.config
 CONFIG_BISECT_GOOD = ${CONFIG_DIR}/bpf_good.config
-TEST_BIN = ./test_progs -vv -t btf_dump
+TEST_BIN = ./bpf/test_progs -vv -t btf_dump
 PATTERN = btf_dump_data:FAIL:ensure expected/actual match unexpected ensure expected/actual match: actual '\''int cpu_profile_flip = (int)2'\'' != expected '\''static int cpu_profile_flip = (int)2'\''
 TEST = ${DO_TEST_PATTERN_FAIL}
 
@@ -60,36 +35,36 @@ TEST_TYPE = bisect
 BISECT_TYPE = test
 BISECT_GOOD = rpm-6.4.0-150700.41
 BISECT_BAD = rpm-6.4.0-150700.43
-TEST_BIN = ./test_sockmap -v -n "test redirect wait send mem"
+TEST_BIN = ./bpf/test_sockmap -v -n "test redirect wait send mem"
 TEST = ${DO_TEST_SIMPLE}
 
 
 TEST_START IF ${TEST} == progs
 TEST_TYPE = test
-TEST_BIN = ./test_progs
+TEST_BIN = ./bpf/test_progs
 TEST = ${DO_TEST_SIMPLE}
 
 TEST_START IF ${TEST} == sockmap
 TEST_TYPE = test
 TEST_DIR = /usr/share/kselftests/bpf
-TEST_BIN = ./test_sockmap -v -n "test redirect wait send mem"
+TEST_BIN = ./bpf/test_sockmap -v -n "test redirect wait send mem"
 TEST = ${DO_TEST_SIMPLE}
 
 TEST_START IF ${TEST} == bpf_nf
 TEST_TYPE = test
-TEST_BIN = ./test_progs -vv -t bpf_nf
+TEST_BIN = ./bpf/test_progs -vv -t bpf_nf
 PATTERN = '\''bpf_ct_change_status'\'': not found in kernel or module BTFs
 TEST = ${DO_TEST_PATTERN_FAIL}
 
 TEST_START IF ${TEST} == attach_probe
 TEST_TYPE = test
-TEST_BIN = ./test_progs -vv -t attach_probe
+TEST_BIN = ./bpf/test_progs -vv -t attach_probe
 PATTERN = libbpf: elf: failed to find symbol '\''trigger_func2'\'' in '\''/proc/self/exe'\''
 TEST = ${DO_TEST_PATTERN_FAIL}
 
 TEST_START IF ${TEST} == bpf_cookie
 TEST_TYPE = test
-TEST_BIN = ./test_progs -vv -t bpf_cookie
+TEST_BIN = ./bpf/test_progs -vv -t bpf_cookie
 # PATTERN = uprobe_multi_attach_api_subtest:FAIL:bpf_program__attach_uprobe_multi unexpected error: -2
 # perf_event:
 PATTERN = pe_subtest:FAIL:pe_res1 unexpected pe_res1: actual 0 != expected 1048576
@@ -97,68 +72,68 @@ TEST = ${DO_TEST_PATTERN_FAIL}
 
 TEST_START IF ${TEST} == iters
 TEST_TYPE = test
-TEST_BIN = ./test_progs -vv -t iters
+TEST_BIN = ./bpf/test_progs -vv -t iters
 PATTERN = libbpf: prog '\''iter_next_ptr_mem_not_trusted'\'': BPF program load failed: Permission denied
 TEST = ${DO_TEST_PATTERN_FAIL}
 
 TEST_START IF ${TEST} == kfunc_call
 TEST_TYPE = test
-TEST_BIN = ./test_progs -vv -t kfunc_call
+TEST_BIN = ./bpf/test_progs -vv -t kfunc_call
 #PATTERN = libbpf: prog '\''kfunc_call_test_pointer_arg_type_mismatch'\'': BPF program load failed: Permission denied
 PATTERN = Expected err_msg: arg#0 expected pointer to ctx, but got scalar
 TEST = ${DO_TEST_PATTERN_FAIL}
 
 TEST_START IF ${TEST} == libbpf_probe_prog_types
 TEST_TYPE = test
-TEST_BIN = ./test_progs -vv -t libbpf_probe_prog_types
+TEST_BIN = ./bpf/test_progs -vv -t libbpf_probe_prog_types
 PATTERN = test_libbpf_probe_prog_types:FAIL:BPF_PROG_TYPE_LIRC_MODE2 unexpected BPF_PROG_TYPE_LIRC_MODE2: actual 0 != expected 1
 TEST = ${DO_TEST_PATTERN_FAIL}
 
 TEST_START IF ${TEST} == kprobe_multi_test
 TEST_TYPE = test
-TEST_BIN = ./test_progs -vv -t kprobe_multi_test
+TEST_BIN = ./bpf/test_progs -vv -t kprobe_multi_test
 PATTERN = test_attach_override:FAIL:kprobe_multi_empty__open_and_load unexpected error: -22
 TEST = ${DO_TEST_PATTERN_FAIL}
 
 TEST_START IF ${TEST} == ns_current_pid_tgid
 TEST_TYPE = test
-TEST_BIN = ./test_progs -t ns_current_pid_tgid
+TEST_BIN = ./bpf/test_progs -t ns_current_pid_tgid
 PATTERN = test_ns_current_pid_tgid_new_ns:FAIL:newns_pidtgid unexpected error: 255 (errno 2)
 TEST = ${DO_TEST_PATTERN_FAIL}
 
 TEST_START IF ${TEST} == sockmap_ktls
 TEST_TYPE = test
-TEST_BIN = ./test_progs -vv -t sockmap_ktls
+TEST_BIN = ./bpf/test_progs -vv -t sockmap_ktls
 PATTERN = test_sockmap_ktls_disconnect_after_delete:FAIL:disconnect unexpected error: -1 (errno 95)
 TEST = ${DO_TEST_PATTERN_FAIL}
 
 TEST_START IF ${TEST} == test_bpf_ma
 TEST_TYPE = test
-TEST_BIN = ./test_progs -vv -t test_bpf_ma
+TEST_BIN = ./bpf/test_progs -vv -t test_bpf_ma
 PATTERN = test_test_bpf_ma:FAIL:test error unexpected error: 2 (errno 2)
 TEST = ${DO_TEST_PATTERN_FAIL}
 
 TEST_START IF ${TEST} == verif_scale_strobemeta_subprogs
 TEST_TYPE = test
-TEST_BIN = ./test_progs -vv -t verif_scale_strobemeta_subprogs
+TEST_BIN = ./bpf/test_progs -vv -t verif_scale_strobemeta_subprogs
 PATTERN = scale_test:FAIL:expect_success unexpected error: -13 (errno 13)
 TEST = ${DO_TEST_PATTERN_FAIL}
 
 TEST_START IF ${TEST} == verifier_scalar_ids
 TEST_TYPE = test
-TEST_BIN = ./test_progs -vv -t verifier_scalar_ids
+TEST_BIN = ./bpf/test_progs -vv -t verifier_scalar_ids
 PATTERN = libbpf: prog '\''linked_regs_broken_link_2'\'': failed to load: -22
 TEST = ${DO_TEST_PATTERN_FAIL}
 
 TEST_START IF ${TEST} == verifier_sockmap_mutate
 TEST_TYPE = test
-TEST_BIN = ./test_progs -vv -t verifier_sockmap_mutate
+TEST_BIN = ./bpf/test_progs -vv -t verifier_sockmap_mutate
 PATTERN = EXPECTED MSG: '\''program of this type cannot use helper bpf_sk_release'\''
 TEST = ${DO_TEST_PATTERN_FAIL}
 
 TEST_START IF ${TEST} == verifier_spill_fill
 TEST_TYPE = test
-TEST_BIN = ./test_progs -vv -t verifier_spill_fill
+TEST_BIN = ./bpf/test_progs -vv -t verifier_spill_fill
 # stack_load_preserves_const_precision
 # PATTERN = EXPECTED MSG: '\''mark_precise: frame0: parent state regs= stack=-8:  R0_w=1 R1=ctx() R6_r=map_value(map=.data.two_byte_,ks=4,vs=2) R10=fp0 fp-8_rw=P1 fp-16_w=1'\''
 # stack_load_preserves_const_precision_subreg
@@ -167,7 +142,7 @@ TEST = ${DO_TEST_PATTERN_FAIL}
 
 TEST_START IF ${TEST} == verifier_subprog_precision
 TEST_TYPE = test
-TEST_BIN = ./test_progs -vv -t verifier_subprog_precision
+TEST_BIN = ./bpf/test_progs -vv -t verifier_subprog_precision
 # callback_precise_return_fail
 # PATTERN = libbpf: prog '\''callback_precise_return_fail'\'': failed to load: -22
 # subprog_spill_into_parent_stack_slot_precise
@@ -176,89 +151,89 @@ TEST = ${DO_TEST_PATTERN_FAIL}
 
 TEST_START IF ${TEST} == xdp_context_test_run
 TEST_TYPE = test
-TEST_BIN = ./test_progs -vv -t xdp_context_test_run
+TEST_BIN = ./bpf/test_progs -vv -t xdp_context_test_run
 PATTERN = test_xdp_context_error:FAIL:bpf_prog_test_run unexpected success: 0
 TEST = ${DO_TEST_PATTERN_FAIL}
 
 TEST_START ITERATE 5 IF ${TEST} == xdp_bonding
 TEST_TYPE = test
-TEST_BIN = ./test_progs -vv -t xdp_bonding
+TEST_BIN = ./bpf/test_progs -vv -t xdp_bonding
 GREP_OPT := -e
 PATTERN = test_xdp_bonding.*:FAIL:expected.*unexpected expected.*: actual
 TEST = ${DO_TEST_PATTERN_FAIL}
 
 TEST_START IF ${TEST} == xdp_devmap_attach
 TEST_TYPE = test
-TEST_BIN = ./test_progs -vv -t xdp_devmap_attach
+TEST_BIN = ./bpf/test_progs -vv -t xdp_devmap_attach
 PATTERN = test_xdp_with_devmap_helpers:FAIL:XDP test run unexpected error: -22 (errno 22)
 TEST = ${DO_TEST_PATTERN_FAIL}
 
 TEST_START IF ${TEST} == xdp_synproxy
 TEST_TYPE = test
-TEST_BIN = ./test_progs -vv -t xdp_synproxy
+TEST_BIN = ./bpf/test_progs -vv -t xdp_synproxy
 PATTERN = test_synproxy:FAIL:sysctl -w net.netfilter.nf_conntrack_tcp_loose=0 unexpected error: 65280 (errno 2)
 TEST = ${DO_TEST_PATTERN_FAIL}
 
 TEST_START IF ${TEST} == btf_dump
 TEST_TYPE = test
-TEST_BIN = ./test_progs -vv -t btf_dump
+TEST_BIN = ./bpf/test_progs -vv -t btf_dump
 PATTERN = btf_dump_data:FAIL:ensure expected/actual match unexpected ensure expected/actual match: actual '\''int cpu_profile_flip = (int)2'\'' != expected '\''static int cpu_profile_flip = (int)2'\''
 TEST = ${DO_TEST_PATTERN_FAIL}
 
 TEST_START IF ${TEST} == verif_scale_pyperf600
 TEST_TYPE = test
-TEST_BIN = ./test_progs -vv -t verif_scale_pyperf600
+TEST_BIN = ./bpf/test_progs -vv -t verif_scale_pyperf600
 PATTERN = scale_test:FAIL:expect_success unexpected error: -14 (errno 14)
 TEST = ${DO_TEST_PATTERN_FAIL}
 
 TEST_START IF ${TEST} == bpf_iter
 TEST_TYPE = test
-TEST_BIN = ./test_progs -vv -t bpf_iter
+TEST_BIN = ./bpf/test_progs -vv -t bpf_iter
 PATTERN = test_task_vma_common:FAIL:compare_output unexpected compare_output: actual
 TEST = ${DO_TEST_PATTERN_FAIL}
 
 TEST_START IF ${TEST} == bpftool.sh
 TEST_TYPE = test
-TEST_BIN = ./test_bpftool.sh
+TEST_BIN = ./bpf/test_bpftool.sh
 TEST = ${DO_TEST_SIMPLE}
 
 TEST_START IF ${TEST} == test_xsk.sh
 TEST_TYPE = test
-TEST_BIN = ./test_xsk.sh
+TEST_BIN = ./bpf/test_xsk.sh
 TEST = ${DO_TEST_SIMPLE}
 
 TEST_START IF ${TEST} == xdp_cpumap_attach
 TEST_TYPE = test
-TEST_BIN = ./test_progs -vv -t xdp_cpumap_attach
+TEST_BIN = ./bpf/test_progs -vv -t xdp_cpumap_attach
 TEST = ${DO_TEST_SIMPLE}
 
 TEST_START IF ${TEST} == verify_pkcs7_sig
 # NOTE: test requires verify_sig_setup.sh and sign-file in the cwd
 TEST_TYPE = test
-# TEST_BIN = ./test_progs-no_alu32 -vv -t verify_pkcs7_sig
+# TEST_BIN = ./bpf/test_progs-no_alu32 -vv -t verify_pkcs7_sig
 # PATTERN = test_verify_pkcs7_sig:FAIL:_run_setup_process unexpected error: 2 (errno 2)
-TEST_BIN = cd ..; KSELFTEST_TEST_PROGS_NO_ALU32_ARGS="-v -t verify_pkcs7_sig" ./run_kselftest.sh -t bpf:test_progs-no_alu32
+TEST_BIN = KSELFTEST_TEST_PROGS_NO_ALU32_ARGS="-v -t verify_pkcs7_sig" ./run_kselftest.sh -t bpf:test_progs-no_alu32
 PATTERN = test_verify_pkcs7_sig:FAIL:populate_data_item_str unexpected error:
 TEST = ${DO_TEST_PATTERN_FAIL}
 
 TEST_START IF ${TEST} == verifier
 TEST_TYPE = test
-TEST_BIN = cd ..; KSELFTEST_TEST_PROGS_ARGS="-t verifier" ./run_kselftest.sh -t bpf:test_progs
+TEST_BIN = KSELFTEST_TEST_PROGS_ARGS="-t verifier" ./run_kselftest.sh -t bpf:test_progs
 TEST = ${DO_TEST_SIMPLE}
 
 TEST_START IF ${TEST} == wq
 TEST_TYPE = test
-TEST_BIN = ./test_progs-no_alu32 -vv -t verify_pkcs7_sig -t wq
+TEST_BIN = ./bpf/test_progs-no_alu32 -vv -t verify_pkcs7_sig -t wq
 PATTERN = libbpf: extern (func ksym) '\''bpf_kfunc_call_test_sleepable'\'': not found in kernel or module BTFs
 TEST = ${DO_TEST_PATTERN_FAIL}
 
 TEST_START IF ${TEST} == tcpnotify_user
 TEST_TYPE = test
-TEST_BIN = ./test_tcpnotify_user
+TEST_BIN = ./bpf/test_tcpnotify_user
 TEST = ${DO_TEST_SIMPLE}
 
 TEST_START ITERATE 10 IF ${TEST} == perf_link
 TEST_TYPE = test
-TEST_BIN = ./test_progs-no_alu32 -vv -t perf_link
+TEST_BIN = ./bpf/test_progs-no_alu32 -vv -t perf_link
 PATTERN = serial_test_perf_link:FAIL:run_cnt unexpected run_cnt: actual 0 <= expected 0
 TEST = ${DO_TEST_PATTERN_FAIL}
