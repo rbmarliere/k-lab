@@ -7,7 +7,7 @@ PREP_TEST = mount bpffs /sys/fs/bpf -t bpf && cd ${TEST_DIR} &&
 
 VNG_ARGS = --user root
 
-POST_BUILD_APPEND = ${RUN_HOOK} ${THIS_DIR}/hooks/selftests/bpf/post_build
+POST_BUILD_APPEND = ${RUN} ${THIS_DIR}/hooks/selftests/bpf/post_build
 
 DEPS = gxx dwarves libdwarf python3-docutils clang lld llvm llvm-dev xxd
 
