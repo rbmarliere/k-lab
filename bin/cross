@@ -288,10 +288,14 @@ preflight_root() {
 	local root=${1-}
 	local arch=${2-}
 	local detected
+	local root_uid
 
 	root=$(normalize_root "$root")
 	[[ -n $root ]] || return 0
 	[[ -d $root ]] || die "ROOT is not a directory: $root"
+
+	root_uid=$(stat -c %u -- "$root") || die "failed to stat ROOT: $root"
+	[[ $root_uid == "$(id -u)" ]] || die "ROOT must be owned by uid $(id -u): $root"
 
 	detected=$(root_arch "$root")
 	if [[ -n $arch ]]; then
