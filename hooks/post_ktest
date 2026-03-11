@@ -1,3 +1,2 @@
 #!/bin/bash -eu
 
-ln -sfnT "$TMP_DIR" "$BUILD_DIR"/tmp
