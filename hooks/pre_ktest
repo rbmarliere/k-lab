@@ -1,3 +1,6 @@
 #!/bin/bash -eu
 
+rm "$TMP_DIR"/*min.config || true
+: >"$TMP_DIR"/min.config
+
 ln -sfnT "$TMP_DIR" "$BUILD_DIR"/tmp-"$VNG_PORT"

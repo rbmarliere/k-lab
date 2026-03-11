@@ -1,6 +1,5 @@
 #!/bin/bash -eu
 
-: >"$TMP_DIR"/min.config
 for f in "$TMP_DIR"/*-min.config; do
 	[[ -r $f ]] || continue
 	cat "$f" >>"$TMP_DIR"/min.config
