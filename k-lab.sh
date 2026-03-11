@@ -18,7 +18,7 @@ if ! require_vng; then
 fi
 
 usage() {
-	echo "usage: kt [-B] [-C] [-D name=value] [-n] <test>"
+	echo "usage: kt [-B] [-C] [-D name=value] [-n] [test]"
 	echo
 	echo "options:"
 	echo "  -B              set BUILD_TYPE=nobuild"
@@ -28,6 +28,7 @@ usage() {
 	echo "  -h              show this help"
 	echo
 	echo "run kt from within a Linux kernel worktree."
+	echo "with no test argument, kt runs $THIS_DIR/include/defaults.conf."
 	echo "test names support Bash tab completion from tests/."
 }
 
@@ -183,21 +184,22 @@ kt() {
 		kargs+=("--dry-run")
 	fi
 
+	local file_path
 	if (($# == 0)); then
-		usage >&2
-		return 2
-	fi
-	if [[ ! -d $THIS_DIR/tests ]]; then
-		echo "ERROR: $THIS_DIR/tests: Directory not found" >&2
-		return 2
-	fi
+		file_path="$THIS_DIR/include/defaults.conf"
+	else
+		if [[ ! -d $THIS_DIR/tests ]]; then
+			echo "ERROR: $THIS_DIR/tests: Directory not found" >&2
+			return 2
+		fi
 
-	local file_path="$1"
-	if [[ ! "$file_path" = /* ]]; then
-		file_path="$THIS_DIR/tests/$file_path"
+		file_path="$1"
+		if [[ ! "$file_path" = /* ]]; then
+			file_path="$THIS_DIR/tests/$file_path"
+		fi
 	fi
 	if [[ ! -e $file_path ]]; then
-		echo "ERROR: missing test: $file_path" >&2
+		echo "ERROR: missing config: $file_path" >&2
 		return 1
 	fi
 
