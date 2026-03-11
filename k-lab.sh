@@ -18,10 +18,9 @@ if ! require_vng; then
 fi
 
 usage() {
-	echo "usage: kt [-B] [-C] [-D name=value] [-n] [test]"
+	echo "usage: kt [-C] [-D name=value] [-n] [test]"
 	echo
 	echo "options:"
-	echo "  -B              set BUILD_TYPE=nobuild"
 	echo "  -C              set BUILD_NOCLEAN=1"
 	echo "  -D name=value   pass through to ktest.pl as -D name=value or -D name:=value"
 	echo "  -n              print resolved test options and exit"
@@ -148,10 +147,9 @@ kt() {
 		return 1
 	fi
 
-	while getopts ":CBD:hn" opt; do
+	while getopts ":CD:hn" opt; do
 		case "$opt" in
 		C) kargs+=("-D" "BUILD_NOCLEAN=1") ;;
-		B) kargs+=("-D" "BUILD_TYPE=nobuild") ;;
 		D)
 			case "$OPTARG" in
 			ROOT=* | ARCH=* | VNG_PORT=*)
