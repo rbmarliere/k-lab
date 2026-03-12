@@ -34,7 +34,7 @@ fi
 if [[ -f $FPID ]]; then
 	pid=$(<"$FPID")
 	kill -- "-${pid}" || echo "ERROR: vng not running" >&2
-	wait_for_group_exit "$pid" || echo "WARNING: vng still running" >&2
+	wait_for_group_exit "$pid" || echo "WARN: vng still running" >&2
 	rm -f "$FPID"
 fi
 

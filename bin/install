@@ -1,7 +1,8 @@
 #!/bin/bash -eu
 
 auto_install=
-declare -A warned_fallbacks=()
+declare -A fallback_map_files=()
+lookup_package_result=
 while [[ $# -gt 0 ]]; do
 	case "$1" in
 	--auto)
@@ -41,7 +42,7 @@ lookup_package() {
 	local dep=$2
 	local pkg
 
-	if pkg=$(
+	if [[ -e $map_file ]] && pkg=$(
 		awk -v key="$dep" '
 		$0 ~ /^[[:space:]]*#/ || NF == 0 { next }
 		$1 == key {
@@ -56,16 +57,21 @@ lookup_package() {
 		}
 	' "$map_file"
 	); then
-		printf '%s\n' "$pkg"
+		lookup_package_result=$pkg
 		return 0
 	fi
 
-	if [[ -z ${warned_fallbacks[$dep]+x} ]]; then
-		echo "WARNING: dependency '$dep' is not mapped in $(basename "$map_file"); using '$dep' as the package name" >&2
-		warned_fallbacks[$dep]=1
-	fi
+	fallback_map_files[$dep]=$(basename "$map_file")
+	lookup_package_result=$dep
+}
 
-	printf '%s\n' "$dep"
+warn_fallback_packages() {
+	local pkg
+
+	for pkg in "$@"; do
+		[[ -n ${fallback_map_files[$pkg]+x} ]] || continue
+		echo "WARN: dependency '$pkg' is not mapped in ${fallback_map_files[$pkg]}; using '$pkg' as the package name" >&2
+	done
 }
 
 run() {
@@ -119,6 +125,9 @@ sles)
 	15*)
 		pkg_file="$BIN"/../pkg/sles15
 		;;
+	16*)
+		pkg_file="$BIN"/../pkg/sles16
+		;;
 	*)
 		die "unsupported SLES version VERSION_ID=${VERSION_ID:-unknown}"
 		;;
@@ -128,18 +137,19 @@ sles)
 	update_cmd=(zypper --gpg-auto-import-keys refresh)
 	install_cmd=(zypper --non-interactive install)
 	;;
-*suse*|opensuse*)
-	die "unsupported SUSE-family distro ID=$ID VERSION_ID=${VERSION_ID:-unknown}"
-	;;
 *)
 	die "unsupported distro ID=$ID"
 	;;
 esac
 
+if [[ ! -e $pkg_file ]]; then
+	echo "WARN: File not found: $pkg_file" >&2
+fi
+
 packages=()
 for dep in "$@"; do
-	pkg=$(lookup_package "$pkg_file" "$dep")
-	packages+=("$pkg")
+	lookup_package "$pkg_file" "$dep"
+	packages+=("$lookup_package_result")
 done
 
 mapfile -t packages < <(printf '%s\n' "${packages[@]}" | sort -u)
@@ -158,6 +168,7 @@ if [[ ${#missing[@]} -gt 0 ]]; then
 		exit 1
 	fi
 
+	warn_fallback_packages "${missing[@]}"
 	echo "Installing missing dependency packages: ${missing[*]}"
 	if [[ ${#repair_cmd[@]} -gt 0 ]]; then
 		run install "${repair_cmd[@]}" || true
