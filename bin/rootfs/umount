@@ -11,7 +11,7 @@ resolve_root || exit 1
 # unmount mountpoints under ROOT, deepest first
 ret=0
 while read -r m; do
-	if "$BIN"/run --host --as-root umount "$m"; then
+	if "$BIN"/run --as-root umount "$m"; then
 		continue
 	fi
 

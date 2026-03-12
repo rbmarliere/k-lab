@@ -17,15 +17,10 @@ is_sudo_failure() {
 }
 
 run_as_root=
-run_on_host=
 while [[ $# -gt 0 ]]; do
 	case "$1" in
 	--as-root)
 		run_as_root=1
-		shift
-		;;
-	--host)
-		run_on_host=1
 		shift
 		;;
 	--)
@@ -41,10 +36,6 @@ done
 if [[ $# -eq 0 ]]; then
 	echo "ERROR: missing command" >&2
 	exit 1
-fi
-
-if [[ -n ${ROOT-} && -z $run_on_host ]]; then
-	exec "$BIN"/rootfs/run "$@"
 fi
 
 if [[ -n $run_as_root ]]; then
