@@ -1,4 +1,7 @@
-INCLUDE ../../include/defaults.conf
+DEFAULTS IF DEFINED ARCH
+BPF_ARCH := ${ARCH}
+ELSE
+BPF_ARCH := x86_64
 
 DEFAULTS OVERRIDE
 
@@ -7,11 +10,14 @@ PREP_TEST = mount bpffs /sys/fs/bpf -t bpf && cd ${TEST_DIR} &&
 
 VNG_ARGS = --user root
 
-POST_BUILD_APPEND = ${RUN} ${THIS_DIR}/hooks/selftests/bpf/post_build
-
 DEPS = gxx dwarves libdwarf python3-docutils clang lld llvm llvm-dev xxd
 
-ADD_CONFIG = ${BUILD_DIR}/tools/testing/selftests/bpf/config ${BUILD_DIR}/tools/testing/selftests/bpf/config.${ARCH}
+ADD_CONFIG = ${BUILD_DIR}/tools/testing/selftests/bpf/config ${BUILD_DIR}/tools/testing/selftests/bpf/config.${BPF_ARCH}
+
+INCLUDE ../../include/defaults.conf
+
+DEFAULTS OVERRIDE
+POST_BUILD_APPEND = ${RUN} ${THIS_DIR}/hooks/selftests/bpf/post_build
 
 
 TEST_START IF ${TEST} == all
@@ -218,7 +224,7 @@ TEST = ${DO_TEST_PATTERN_FAIL}
 
 TEST_START IF ${TEST} == verifier
 TEST_TYPE = test
-TEST_BIN = KSELFTEST_TEST_PROGS_ARGS="-t verifier" ./run_kselftest.sh -t bpf:test_progs
+TEST_BIN = KSELFTEST_TEST_PROGS_ARGS="-a verifier" ./run_kselftest.sh -t bpf:test_progs
 TEST = ${DO_TEST_SIMPLE}
 
 TEST_START IF ${TEST} == wq

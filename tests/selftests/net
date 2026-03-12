@@ -1,5 +1,3 @@
-INCLUDE ../../include/defaults.conf
-
 DEFAULTS OVERRIDE
 
 TEST_DIR = ${OUTPUT_DIR}/kselftest/kselftest_install
@@ -7,11 +5,14 @@ PREP_TEST = cd ${TEST_DIR} &&
 
 VNG_ARGS = --user root
 
-POST_BUILD_APPEND = ${RUN} ${THIS_DIR}/hooks/selftests/net/post_build
-
 DEPS = libcap tcpdump libnuma python3-yaml python3-jsonschema iperf net-tools net-tools-deprecated
 
 ADD_CONFIG = ${BUILD_DIR}/tools/testing/selftests/net/config
+
+INCLUDE ../../include/defaults.conf
+
+DEFAULTS OVERRIDE
+POST_BUILD_APPEND = ${RUN} ${THIS_DIR}/hooks/selftests/net/post_build
 
 
 TEST_START IF ${TEST} == all

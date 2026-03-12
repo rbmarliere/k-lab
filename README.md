@@ -60,7 +60,8 @@ kt -D BUILD_TYPE=defconfig
 kt nd_tbl
 kt -D ROOT:=/roots/debian/trixie/x86_64
 kt -D TEST:=progs selftests/bpf
-kt -D TEST:=tumbleweed-only selftests/net
+kt -D PROFILE:=sl-16.1
+kt -D PROFILE:=tumbleweed-only -D TEST:=verifier selftests/bpf
 kt -D VNG_PORT:=22999 nd_tbl
 ```
 
@@ -69,7 +70,7 @@ Wrapper options:
 - `-C` sets `BUILD_NOCLEAN=1`
 - `-D name=value` passes a normal `ktest.pl` override
 - `-D name:=value` overrides a file-scoped parse-time variable such as `ROOT`,
-  `ARCH`, `VNG_PORT`, or `TEST`
+  `ARCH`, `VNG_PORT`, `TEST`, or `PROFILE`
 - `-n` prints the resolved config and exits
 
 Before a real run, `kt` does its own `ktest.pl --dry-run`, preflights resolved
@@ -111,11 +112,11 @@ the bits they care about.
 Minimal shape:
 
 ```conf
-INCLUDE ../include/defaults.conf
-
 DEFAULTS OVERRIDE
 BUILD_TYPE = defconfig
-ADD_CONFIG = ${CONFIG_DIR}/my.config
+ADD_CONFIG = ${THIS_DIR}/../config/my.config
+
+INCLUDE ../include/defaults.conf
 
 TEST_START
 TEST_TYPE = test
@@ -130,8 +131,14 @@ paths:
 - `ARCH`
 - `VNG_PORT`
 - `TEST`
+- `PROFILE`
 
-Do not set those parse-time variables inside `TEST_START`.
+Do not set those parse-time variables inside `TEST_START`. In top-level test
+files, keep local `DEFAULTS OVERRIDE` above `INCLUDE ../include/defaults.conf`
+so profile selection can still override those defaults. That also means
+include-defined temp vars such as `CONFIG_DIR` are not available yet there; use
+an explicit path from `THIS_DIR` instead, or move that specific assignment
+below the include.
 
 Use `=` for normal runtime options such as:
 
@@ -164,9 +171,10 @@ For hooks, keep it simple:
   own the whole phase
 
 `include/suse.conf` is part of the default stack and provides shared SUSE
-selectors such as `suse-no-config`, `tumbleweed`, `sl-16.0`, and `sl-16.1`,
-plus their `-only` variants. The matching SUSE pre-ktest hook writes the
-minimal config fragment for the selected product.
+profiles such as `suse-no-config`, `tumbleweed`, `sl-16.0`, and `sl-16.1`,
+plus their `-only` variants. Use `PROFILE:=...` for those presets and keep
+`TEST:=...` for the actual test selection. The matching SUSE pre-ktest hook
+writes the minimal config fragment for the selected product.
 
 ## Root Filesystems and Privileges
 

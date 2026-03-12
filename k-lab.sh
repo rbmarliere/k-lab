@@ -152,7 +152,7 @@ kt() {
 		C) kargs+=("-D" "BUILD_NOCLEAN=1") ;;
 		D)
 			case "$OPTARG" in
-			ROOT=* | ARCH=* | VNG_PORT=*)
+			ROOT=* | ARCH=* | VNG_PORT=* | TEST=* | PROFILE=*)
 				echo "ERROR: use -D ${OPTARG%%=*}:=${OPTARG#*=} for file-scoped overrides" >&2
 				return 2
 				;;

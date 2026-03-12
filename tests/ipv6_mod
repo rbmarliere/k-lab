@@ -1,11 +1,11 @@
-INCLUDE ../include/defaults.conf
-
 DEFAULTS OVERRIDE
 DEPS = tcpdump libnuma python-yaml python-jsonschema iperf
 VNG_ARGS = --user root
 ADD_CONFIG = ${BUILD_DIR}/tools/testing/selftests/net/config
 DIE_ON_FAILURE = 0
 BUILD_TYPE = defconfig
+
+INCLUDE ../include/defaults.conf
 
 TEST_START
 TEST_NAME = ipv6_y
