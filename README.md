@@ -57,6 +57,7 @@ Examples:
 ```bash
 kt
 kt -D BUILD_TYPE=defconfig
+kt -D CC=gcc-7
 kt nd_tbl
 kt -D ROOT:=/roots/debian/trixie/x86_64
 kt -D TEST:=progs selftests/bpf
@@ -137,12 +138,16 @@ Use `=` for normal runtime options such as:
 
 - `BUILD_TYPE`
 - `ADD_CONFIG`
+- `CC`
 - `DEPS`
 - `VNG_MEM`
 - `VNG_ARGS`
 - `BUILD_IN_ROOT`
 - `PREP_TEST`
 - `POST_BUILD_APPEND`
+
+`CC` is currently a global build setting. Set it at top level or with
+`-D CC=...`, not inside `TEST_START`.
 
 `include/defaults.conf` already pulls in the shared default layers. In most
 cases you should include `defaults.conf` and stop there.

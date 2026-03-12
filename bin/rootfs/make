@@ -21,6 +21,9 @@ fi
 if [[ ${BUILD_IN_ROOT:-0} != 1 ]] && [[ -n ${CROSS_COMPILE-} ]]; then
 	cmd+=("CROSS_COMPILE=$CROSS_COMPILE")
 fi
+if [[ -n ${CC-} ]]; then
+	cmd+=("CC=$CC")
+fi
 
 has_modules_install=0
 for arg in "$@"; do

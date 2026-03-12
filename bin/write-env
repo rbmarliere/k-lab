@@ -1,0 +1,21 @@
+#!/bin/bash -eu
+
+[[ -n ${TMP_DIR-} ]] || {
+	echo "ERROR: TMP_DIR is not set" >&2
+	exit 1
+}
+
+env_file=$TMP_DIR/env.sh
+{
+	printf '#!/bin/bash\n'
+	for key in \
+		BIN TOOLS_DIR BUILD_DIR BUILD_OPTIONS ROOT AUTO_INSTALL_DEPS BUILD_IN_ROOT \
+		ARCH CROSS_COMPILE BUILD_TARGET VNG_DIR VNG_PORT VNG_MEM TMP_DIR OUTPUT_DIR CC
+	do
+		if [[ -n ${!key-} ]]; then
+			printf 'export %s=%q\n' "$key" "${!key}"
+		else
+			printf 'unset %s\n' "$key"
+		fi
+	done
+} >"$env_file"

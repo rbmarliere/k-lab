@@ -21,6 +21,9 @@ fi
 if [[ -n ${CROSS_COMPILE-} ]]; then
 	make_cmd+=("CROSS_COMPILE=$CROSS_COMPILE")
 fi
+if [[ -n ${CC-} ]]; then
+	make_cmd+=("CC=$CC")
+fi
 
 if [[ -n ${ROOT-} ]]; then
 	if [[ ${BUILD_IN_ROOT:-0} == 1 ]] || ! "$BIN"/cross is-foreign "${ARCH:-x86_64}"; then
