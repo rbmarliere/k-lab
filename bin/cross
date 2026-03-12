@@ -175,18 +175,48 @@ busybox_path() {
 
 probe_root_elf() {
 	local root=$1
+	local root_display=$1
 	local rel path real
+
+	resolve_path_under_root() {
+		local root=$1
+		local path=$2
+		local target dir
+		local depth=0
+
+		while [[ -L $path ]]; do
+			((depth++ < 40)) || die "too many symlinks while probing ROOT=$root"
+
+			target=$(readlink -- "$path") || die "failed to read symlink: $path"
+			if [[ $target == /* ]]; then
+				path=$root$target
+				continue
+			fi
+
+			dir=$(dirname -- "$path")
+			path=$(realpath -m -- "$dir/$target")
+			case "$path" in
+			"$root" | "$root"/*)
+				;;
+			*)
+				die "symlink escapes ROOT=$root: $path"
+				;;
+			esac
+		done
+
+		printf '%s\n' "$path"
+	}
 
 	[[ -n $root ]] || return 1
 	[[ -d $root ]] || die "ROOT is not a directory: $root"
+	root=$(realpath -e -- "$root") || die "failed to resolve ROOT=$root_display"
 
 	for rel in /bin/sh /usr/bin/env /bin/bash /usr/bin/bash /lib/systemd/systemd /sbin/init; do
 		path=$root$rel
 		[[ -e $path ]] || continue
 
-		real=$path
-		if ! real=$(readlink -f -- "$path" 2>/dev/null); then
-			real=$path
+		if ! real=$(resolve_path_under_root "$root" "$path"); then
+			return 1
 		fi
 
 		[[ -f $real ]] || continue
