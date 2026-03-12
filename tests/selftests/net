@@ -2,7 +2,7 @@ INCLUDE ../../include/defaults.conf
 
 DEFAULTS OVERRIDE
 
-TEST_DIR = ${OUTPUT_DIR}/kselftest/kselftest_install
+TEST_DIR = ${OUTPUT_DIR}/kselftest/kselftest_install/net
 PREP_TEST = cd ${TEST_DIR} &&
 
 VNG_ARGS = --user root
@@ -16,18 +16,18 @@ ADD_CONFIG = ${BUILD_DIR}/tools/testing/selftests/net/config
 
 TEST_START IF ${TEST} == all
 TEST_TYPE = test
-TEST_BIN = ./run_kselftest.sh -c net
+TEST_BIN = cd .. && ./run_kselftest.sh -c net
 TEST = ${DO_TEST_SIMPLE}
 
 
 TEST_START IF ${TEST} == stress_reuseport_listen_sh
 TEST_TYPE = test
-TEST_BIN = ./net/stress_reuseport_listen.sh
+TEST_BIN = ./stress_reuseport_listen.sh
 PATTERN = exec of "./stress_reuseport_listen" failed: No such file or directory
 TEST = ${DO_TEST_PATTERN_FAIL}
 
 
 TEST_START IF ${TEST} == rtnetlink_sh
 TEST_TYPE = test
-TEST_BIN = ./net/rtnetlink.sh
+TEST_BIN = ./rtnetlink.sh
 TEST = ${DO_TEST_SIMPLE}
