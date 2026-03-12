@@ -1,0 +1,47 @@
+#!/bin/bash -eu
+
+ROOT=${ROOT:-/roots/tumbleweed}
+ZYPP_CONF_PATH=$ROOT/etc/zypp
+CALLER=${SUDO_USER:-$(id -un)}
+
+if [[ $(id -u) -gt 0 ]]; then
+	echo "ERROR: need uid=0"
+	exit 1
+fi
+if [[ -e $ROOT ]]; then
+	echo "ERROR: file exists ($ROOT)"
+	exit 1
+fi
+
+mkdir -p \
+  "$ZYPP_CONF_PATH/repos.d" \
+  "$ZYPP_CONF_PATH/services.d" \
+  "$ZYPP_CONF_PATH/vars.d" \
+  "$ROOT/var/cache/zypp"
+
+tee "$ZYPP_CONF_PATH/zypp.conf" >/dev/null <<EOF
+[main]
+configdir = $ZYPP_CONF_PATH
+reposdir = $ZYPP_CONF_PATH/repos.d
+servicesdir = $ZYPP_CONF_PATH/services.d
+varsdir = $ZYPP_CONF_PATH/vars.d
+cachedir = $ROOT/var/cache/zypp
+solver.onlyRequires = true
+installRecommends = false
+EOF
+
+zyp() {
+	env ZYPP_CONF="$ZYPP_CONF_PATH/zypp.conf" zypper --non-interactive --root "$ROOT" --gpg-auto-import-keys "$@"
+}
+
+zyp addrepo --refresh \
+	https://download.opensuse.org/tumbleweed/repo/oss/ opensuse
+
+zyp install openSUSE-release ca-certificates ca-certificates-mozilla coreutils zypper
+
+rm "$ZYPP_CONF_PATH/zypp.conf"
+
+chown -R "$CALLER":"$CALLER" "$ROOT"
+
+# remove setuid from /bin/mount and others, so vng boots with unshare
+find "$ROOT" -xdev -perm /6000 -exec chmod -s {} \;

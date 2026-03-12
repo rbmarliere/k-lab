@@ -198,6 +198,18 @@ ROOT=/roots/debian/trixie/x86_64 ./bin/rootfs/shell -- uname -a
 ./bin/setup/debootstrap -s trixie -r /roots/debian/trixie/arm64 -a arm64
 ```
 
+`bin/setup/suse-bootstrap` is a small helper for Tumbleweed rootfs creation
+(only for native architecture):
+
+```bash
+sudo env ROOT=/roots/tumbleweed ./bin/setup/suse-bootstrap
+```
+
+Other options include vng's own `--root` for Ubuntu cloud images,
+[pacstrap](https://wiki.archlinux.org/title/Pacstrap),
+[alpine-make-rootfs](https://github.com/alpinelinux/alpine-make-rootfs),
+[mkosi](https://github.com/systemd/mkosi), etc.
+
 Runtime privilege escalation is centralized in `bin/run`, which uses `sudo -n`.
 There is no interactive fallback. In practice that covers package installation
 plus the rootfs mount, umount, and `chroot` helpers. For the current
