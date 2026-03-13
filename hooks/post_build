@@ -3,8 +3,9 @@
 arch=${ARCH:-x86_64}
 db=$BUILD_DIR/compile_commands-$arch-$VNG_PORT.json
 
-"$BUILD_DIR"/scripts/clang-tools/gen_compile_commands.py \
-	-d "$OUTPUT_DIR" \
-	-o "$db"
-
-ln -sfnT "$(basename -- "$db")" "$BUILD_DIR"/compile_commands.json
+if [[ -e "$BUILD_DIR"/scripts/clang-tools/gen_compile_commands.py ]]; then
+	"$BUILD_DIR"/scripts/clang-tools/gen_compile_commands.py \
+		-d "$OUTPUT_DIR" \
+		-o "$db"
+	ln -sfnT "$(basename -- "$db")" "$BUILD_DIR"/compile_commands.json
+fi
