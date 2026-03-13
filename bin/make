@@ -25,10 +25,8 @@ if [[ -n ${CC-} ]]; then
 	make_cmd+=("CC=$CC")
 fi
 
-if [[ -n ${ROOT-} ]]; then
-	if [[ ${BUILD_IN_ROOT:-0} == 1 ]] || ! "$BIN"/cross is-foreign "${ARCH:-x86_64}"; then
-		exec "$BIN"/rootfs/make "$@"
-	fi
+if [[ ${BUILD_IN_ROOT:-0} == 1 ]] && [[ -n ${ROOT-} ]]; then
+	exec "$BIN"/rootfs/make "$@"
 fi
 
 exec "${make_cmd[@]}" "$@"
