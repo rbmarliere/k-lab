@@ -129,7 +129,7 @@ sles)
 		pkg_file="$BIN"/../pkg/sles16
 		;;
 	*)
-		die "unsupported SLES version VERSION_ID=${VERSION_ID:-unknown}"
+		pkg_file="$BIN"/../pkg/sles
 		;;
 	esac
 	check_cmd=(rpm -q --whatprovides)

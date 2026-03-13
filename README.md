@@ -208,6 +208,7 @@ ROOT=/roots/debian/trixie/x86_64 ./bin/rootfs/shell -- uname -a
 
 ```bash
 sudo env ROOT=/roots/tumbleweed ./bin/setup/suse-bootstrap
+sudo env ROOT=/roots/tumbleweed ./bin/setup/suse-bootstrap < /tmp/custom-repos
 ```
 
 Other options include vng's own `--root` for Ubuntu cloud images,

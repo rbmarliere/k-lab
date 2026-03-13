@@ -19,7 +19,7 @@ mkdir -p \
   "$ZYPP_CONF_PATH/vars.d" \
   "$ROOT/var/cache/zypp"
 
-tee "$ZYPP_CONF_PATH/zypp.conf" >/dev/null <<EOF
+tee "$ZYPP_CONF_PATH/zypp.conf.klab" >/dev/null <<EOF
 [main]
 configdir = $ZYPP_CONF_PATH
 reposdir = $ZYPP_CONF_PATH/repos.d
@@ -31,15 +31,33 @@ installRecommends = false
 EOF
 
 zyp() {
-	env ZYPP_CONF="$ZYPP_CONF_PATH/zypp.conf" zypper --non-interactive --root "$ROOT" --gpg-auto-import-keys "$@"
+	cmd=(env ZYPP_CONF="$ZYPP_CONF_PATH/zypp.conf.klab" zypper --non-interactive --root "$ROOT" "$@")
+	echo "${cmd[@]}"
+	"${cmd[@]}"
 }
 
-zyp addrepo --refresh \
-	https://download.opensuse.org/tumbleweed/repo/oss/ opensuse
+release_pkg=openSUSE-release
+extra_pkg=(aaa_base busybox coreutils iproute2 util-linux zypper)
 
-zyp install openSUSE-release ca-certificates ca-certificates-mozilla coreutils zypper
+if [[ ! -t 0 ]]; then
+	while IFS= read -r line || [[ -n $line ]]; do
+		[[ $line =~ ^[[:space:]]*($|#) ]] && continue
 
-rm "$ZYPP_CONF_PATH/zypp.conf"
+		read -r -a repo_args <<<"$line"
+		zyp addrepo --refresh --no-gpgcheck "${repo_args[@]}"
+		release_pkg=sles-release
+	done
+fi
+
+if [[ $release_pkg == openSUSE-release ]]; then
+	zyp addrepo --refresh --no-gpgcheck \
+		https://download.opensuse.org/tumbleweed/repo/oss/ opensuse
+	extra_pkg+=(ca-certificates-mozilla coreutils gawk grep gzip sed xz)
+fi
+
+set +e
+
+zyp install "$release_pkg" "${extra_pkg[@]}"
 
 chown -R "$CALLER":"$CALLER" "$ROOT"
 
