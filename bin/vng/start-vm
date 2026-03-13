@@ -26,6 +26,8 @@ set -- \
 	--rwdir "$OUTPUT_DIR=$OUTPUT_DIR" \
 	--ssh-tcp \
 	--ssh "$VNG_PORT" \
+	--force-9p \
+	--disable-microvm \
 	"$@"
 
 rootfs=()
@@ -45,7 +47,6 @@ if "$BIN"/cross is-foreign "${ARCH:-x86_64}"; then
 	arch_args+=(
 		--arch "$("$BIN"/cross vng-arch "${ARCH:-x86_64}")"
 		--busybox "$("$BIN"/cross busybox-path "${ARCH:-x86_64}")"
-		--force-9p
 	)
 fi
 
