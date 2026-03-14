@@ -346,11 +346,11 @@ preflight_vng() {
 
 	root=$(normalize_root "$root")
 	arch=$(resolve_arch "$root" "$arch")
+	busybox=$(busybox_path "$arch")
+	[[ -x $busybox ]] || die "missing static busybox: $busybox (run $THIS_DIR/bin/setup/build-busybox $arch)"
 
 	if is_foreign "$arch"; then
 		[[ -n $root ]] || die "ARCH=$arch requires ROOT for virtme-ng runs"
-		busybox=$(busybox_path "$arch")
-		[[ -x $busybox ]] || die "missing static busybox: $busybox (run $THIS_DIR/bin/setup/build-busybox $arch)"
 	fi
 }
 

@@ -46,9 +46,9 @@ Load the kt shell wrapper and completion with:
 
 Add that line to your shell rc file if you want it by default.
 
-If you want foreign-arch ROOT support in virtme-ng, build the matching static
-busybox binary explicitly, for example:
-  $THIS_DIR/bin/setup/build-busybox arm64
+Before using kt or virtme-ng, build the matching static busybox binary for the
+arch you want to boot, for example:
+  $THIS_DIR/bin/setup/build-busybox x86_64
 
 Run '$THIS_DIR/bin/setup/build-busybox --help' for details.
 EOF

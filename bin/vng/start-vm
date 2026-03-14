@@ -24,14 +24,15 @@ set -- \
 	--memory "${VNG_MEM:-1G}" \
 	--rwdir "$BUILD_DIR=$BUILD_DIR" \
 	--rwdir "$OUTPUT_DIR=$OUTPUT_DIR" \
-	--ssh-tcp \
-	--ssh "$VNG_PORT" \
 	--force-9p \
 	--disable-microvm \
+	--ssh-tcp \
+	--ssh "$VNG_PORT" \
 	"$@"
 
 rootfs=()
 arch_args=()
+resolved_arch=$("$BIN"/cross resolve-arch "${ROOT-}" "${ARCH-}")
 if [[ $has_root -eq 1 ]]; then
 	rootfs=(
 		unshare
@@ -42,11 +43,14 @@ if [[ $has_root -eq 1 ]]; then
 	)
 fi
 
-if "$BIN"/cross is-foreign "${ARCH:-x86_64}"; then
-	"$BIN"/cross preflight-vng "${ROOT-}" "${ARCH-}"
-	arch_args+=(
-		--arch "$("$BIN"/cross vng-arch "${ARCH:-x86_64}")"
-		--busybox "$("$BIN"/cross busybox-path "${ARCH:-x86_64}")"
+"$BIN"/cross preflight-vng "${ROOT-}" "$resolved_arch"
+arch_args=(
+	--busybox "$("$BIN"/cross busybox-path "$resolved_arch")"
+)
+if "$BIN"/cross is-foreign "$resolved_arch"; then
+	arch_args=(
+		--arch "$("$BIN"/cross vng-arch "$resolved_arch")"
+		"${arch_args[@]}"
 	)
 fi
 
