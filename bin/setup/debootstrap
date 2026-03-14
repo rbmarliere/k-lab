@@ -10,14 +10,13 @@ DEBOOTSTRAP=
 
 usage() {
 	cat <<'EOF'
-usage: debootstrap [options]
+usage: debootstrap [options] ROOT
 
 Create a Debian rootfs tree for k-lab and apply the default post-install tweaks.
 
 options:
   -h        show this help
   -s SUITE  Debian suite to bootstrap (default: sid)
-  -r ROOT   target rootfs directory
   -a ARCH   target architecture; accepts k-lab names such as x86_64, arm64,
             arm, powerpc, s390, and riscv
   -e CMD    extra command to run inside the rootfs after bootstrap
@@ -29,6 +28,10 @@ die() {
 	echo "ERROR: $*" >&2
 	exit 1
 }
+
+if [[ $(id -u) -gt 0 ]]; then
+	die "need uid=0"
+fi
 
 need_cmd() {
 	command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"
@@ -101,11 +104,11 @@ ensure_target_root() {
 }
 
 run_second_stage() {
-	if ! sudo chroot "$ROOT" /bin/sh -c 'true' >/dev/null 2>&1; then
+	if ! chroot "$ROOT" /bin/sh -c 'true' >/dev/null 2>&1; then
 		die "foreign second stage requires binfmt_misc plus qemu-user support on the host"
 	fi
 
-	sudo chroot "$ROOT" /debootstrap/debootstrap --second-stage
+	chroot "$ROOT" /debootstrap/debootstrap --second-stage
 }
 
 run_debootstrap() {
@@ -121,7 +124,7 @@ run_debootstrap() {
 		args+=("$MIRROR")
 	fi
 
-	sudo "$DEBOOTSTRAP" "${args[@]}"
+	"$DEBOOTSTRAP" "${args[@]}"
 
 	if [[ $ARCH != "$HOST_ARCH" ]]; then
 		run_second_stage
@@ -129,37 +132,46 @@ run_debootstrap() {
 }
 
 install_guest_packages() {
-	sudo chroot "$ROOT" /bin/sh -lc \
-		'yes | DEBIAN_FRONTEND=noninteractive apt-get install -yqq --allow-unauthenticated linux-image-generic openssh-server'
+	chroot "$ROOT" /bin/sh -lc \
+		'yes | DEBIAN_FRONTEND=noninteractive apt-get install -yqq --allow-unauthenticated openssh-server'
 }
 
 run_extra_command() {
 	[[ -n $EXEC ]] || return 0
 
-	sudo chroot "$ROOT" /bin/bash -ilc "$EXEC"
+	chroot "$ROOT" /bin/bash -ilc "$EXEC"
 }
 
 write_resolv_conf() {
-	sudo tee "$ROOT/etc/resolv.conf" >/dev/null <<'EOF'
+	tee "$ROOT/etc/resolv.conf" >/dev/null <<'EOF'
 nameserver 10.0.2.3
 nameserver 8.8.8.8
 EOF
 }
 
 fix_ownership() {
+	[[ -d $ROOT ]] || return 0
 	local owner=${SUDO_USER:-$USER}
+	chown -R -- "$owner:$owner" "$ROOT"
+}
 
-	sudo chown -R -- "$owner:$owner" "$ROOT"
+on_exit() {
+	local status=$?
+	if ! fix_ownership; then
+		echo "WARN: failed to fix ownership: $ROOT" >&2
+	fi
+	# remove setuid from /bin/mount and others, so vng boots with unshare
+	find "$ROOT" -xdev -perm /6000 -exec chmod -s {} \;
+	return "$status"
 }
 
 run_post_install() {
 	install_guest_packages
 	run_extra_command
 	write_resolv_conf
-	fix_ownership
 }
 
-while getopts "hs:r:a:e:A" opt; do
+while getopts "hs:a:e:A" opt; do
 	case "$opt" in
 	h)
 		usage
@@ -167,9 +179,6 @@ while getopts "hs:r:a:e:A" opt; do
 		;;
 	s)
 		SUITE=$OPTARG
-		;;
-	r)
-		ROOT=$OPTARG
 		;;
 	a)
 		ARCH=$(normalize_arch "$OPTARG")
@@ -187,7 +196,12 @@ while getopts "hs:r:a:e:A" opt; do
 	esac
 done
 
-need_cmd sudo
+shift $((OPTIND - 1))
+[[ $# -le 1 ]] || die "unexpected extra arguments: $*"
+if [[ $# -eq 1 ]]; then
+	ROOT=$1
+fi
+
 need_cmd realpath
 need_cmd chroot
 need_cmd tee
@@ -201,6 +215,8 @@ HOST_ARCH=$(normalize_arch "$(uname -m)")
 ARCH=${ARCH:-$HOST_ARCH}
 
 [[ -n $ROOT ]] || die "no target path specified"
+
+trap on_exit EXIT
 
 ensure_target_root
 run_debootstrap "$(debootstrap_arch "$ARCH")"
