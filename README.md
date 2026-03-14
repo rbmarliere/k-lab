@@ -36,11 +36,13 @@ Bootstrap:
 
 1. Edit `setup.conf`.
 2. Run `./setup.sh`.
-3. Source the wrapper:
+3. Build the matching static busybox for the arch you want to boot, for example
+   `./bin/setup/build-busybox x86_64`.
+4. Source the wrapper:
 
    ```bash source /path/to/k-lab.sh ```
 
-4. From inside a Linux kernel worktree, run `kt`.
+5. From inside a Linux kernel worktree, run `kt`.
 
 `setup.sh` populates `tools/virtme-ng` and links `tools/ktest` to
 `$LINUX_GIT/tools/testing/ktest`.
@@ -55,14 +57,26 @@ creates an empty `.config` and runs `olddefconfig`.
 Examples:
 
 ```bash
+# run vng and wait for ssh connections
 kt
-kt -D BUILD_TYPE=defconfig
-kt -D CC=gcc-7
-kt nd_tbl
-kt -D ROOT:=/roots/debian/trixie/x86_64
-kt -D TEST:=progs selftests/bpf
-kt -D TEST:=tumbleweed-only selftests/net
-kt -D VNG_PORT:=22999 nd_tbl
+
+# build and run all net selftests
+kt -D TEST:=all selftests/net
+
+# don't clean the current $OUTPUT_DIR, but force a defconfig
+kt -C -D BUILD_TYPE=defconfig
+
+# specify a compiler and ssh port to use
+kt -D CC:=gcc-13 -D VNG_PORT:=22001
+
+# build with CROSS_COMPILE_RISCV
+kt -D ROOT:=/roots/debian/trixie/riscv64
+
+# build with the rootfs compiler (binfmt_misc)
+kt -D ROOT:=/roots/debian/sid/arm64 -D BUILD_IN_ROOT:=1
+
+# build a tumbleweed kernel
+kt -D ROOT:=/roots/tumbleweed -D TEST:=suse-only -D BRANCH:=stable
 ```
 
 Wrapper options:
@@ -89,6 +103,7 @@ refreshes `compile_commands.json` to point at
 - a real kernel git worktree at `LINUX_GIT`
 - `$LINUX_GIT/tools/testing/ktest/ktest.pl`
 - a completed `./setup.sh`
+- a matching `./bin/setup/build-busybox <arch>` for the arch you plan to boot
 
 In practice, the host should also have:
 
@@ -168,10 +183,14 @@ For hooks, keep it simple:
 - replace a full `PRE_*` or `POST_*` phase only when you intentionally want to
   own the whole phase
 
-`include/suse.conf` is part of the default stack and provides shared SUSE
-selectors such as `suse-no-config`, `tumbleweed`, `sl-16.0`, and `sl-16.1`,
-plus their `-only` variants. The matching SUSE pre-ktest hook writes the
-minimal config fragment for the selected product.
+# SUSE specifics
+
+`include/suse.conf` is part of the default stack and provides the shared SUSE
+selectors `suse` and `suse-only`. Both use
+`useconfig:${KSOURCE_GIT}/${BRANCH}/config/${ARCH}/default`; `suse-only` also
+clears `ADD_CONFIG`. To use them, define `VERSION`, `PATCHLEVEL`, and `BRANCH`
+in the test file. The matching SUSE pre-ktest hook writes the minimal config
+fragment for the selected product version.
 
 ## Root Filesystems and Privileges
 
@@ -186,8 +205,10 @@ For foreign-arch roots:
 - host-side builds use the resolved `ARCH` plus a host cross toolchain
 - host-side execution inside the rootfs still needs `binfmt_misc` plus QEMU
   user-mode support
-- VM boots also need a matching static busybox build, for example
-  `./bin/setup/build-busybox arm64`
+
+VM boots always use a matching static busybox build. Build it first, for
+example `./bin/setup/build-busybox x86_64` or
+`./bin/setup/build-busybox arm64`.
 
 `bin/rootfs/shell` is a convenience wrapper around the same mount and `chroot`
 path used by normal rootfs-backed runs:
@@ -200,7 +221,7 @@ ROOT=/roots/debian/trixie/x86_64 ./bin/rootfs/shell -- uname -a
 `bin/setup/debootstrap` is a small helper for Debian rootfs creation:
 
 ```bash
-./bin/setup/debootstrap -s trixie -r /roots/debian/trixie/arm64 -a arm64
+sudo ./bin/setup/debootstrap -s trixie -a arm64 /roots/debian/trixie/arm64
 ```
 
 `bin/setup/suse-bootstrap` is a small helper for Tumbleweed rootfs creation
@@ -208,7 +229,7 @@ ROOT=/roots/debian/trixie/x86_64 ./bin/rootfs/shell -- uname -a
 
 ```bash
 sudo env ROOT=/roots/tumbleweed ./bin/setup/suse-bootstrap
-sudo env ROOT=/roots/tumbleweed ./bin/setup/suse-bootstrap < /tmp/custom-repos
+sudo env ROOT=/roots/tumbleweed EXTRA="libstdc++6" ./bin/setup/suse-bootstrap < /tmp/custom-sles-repos
 ```
 
 Other options include vng's own `--root` for Ubuntu cloud images,
@@ -227,8 +248,8 @@ For the built-in flows, the expected sudoers allowlist is:
 - `/usr/bin/chroot`
 - `/usr/bin/mount`
 - `/usr/bin/umount`
-- `/usr/bin/apt` on Debian or Ubuntu systems
-- `/usr/bin/zypper` on SUSE or openSUSE systems
+- `/usr/bin/apt-get` on Debian hosts (untested)
+- `/usr/bin/zypper` on Tumbleweed systems
 
 Some setup helpers also use `sudo`; keep that in mind when preparing a new
 host.
