@@ -2,7 +2,6 @@
 
 ROOT=${ROOT:-/roots/tumbleweed}
 ZYPP_CONF_PATH=$ROOT/etc/zypp
-CALLER=${SUDO_USER:-$(id -un)}
 
 if [[ $(id -u) -gt 0 ]]; then
 	echo "ERROR: need uid=0"
@@ -36,30 +35,64 @@ zyp() {
 	"${cmd[@]}"
 }
 
-release_pkg=openSUSE-release
-extra_pkg=(aaa_base busybox coreutils iproute2 util-linux zypper)
+print_install_hint() {
+	local cmd=(sudo env ZYPP_CONF="$ZYPP_CONF_PATH/zypp.conf.klab" zypper --non-interactive --root "$ROOT" install PACKAGE...)
+
+	printf '\nTo install more packages later, run:\n'
+	printf '%q ' "${cmd[@]}"
+	printf '\n'
+}
+
+fix_ownership() {
+	[[ -d $ROOT ]] || return 0
+	local owner=${SUDO_USER:-$USER}
+	chown -R -- "$owner:$owner" "$ROOT"
+}
+
+on_exit() {
+	local status=$?
+	if ! fix_ownership; then
+		echo "WARN: failed to fix ownership: $ROOT" >&2
+	fi
+	# remove setuid from /bin/mount and others, so vng boots with unshare
+	find "$ROOT" -xdev -perm /6000 -exec chmod -s {} \;
+	return "$status"
+}
+
+pkg=(aaa_base busybox coreutils iproute2 util-linux zypper)
+repos=(
+	"https://download.opensuse.org/tumbleweed/repo/oss/ opensuse"
+)
+use_default_repos=1
+if [[ -n ${EXTRA-} ]]; then
+	read -r -a extra_pkg <<<"$EXTRA"
+	pkg+=("${extra_pkg[@]}")
+fi
 
 if [[ ! -t 0 ]]; then
+	stdin_repos=()
 	while IFS= read -r line || [[ -n $line ]]; do
 		[[ $line =~ ^[[:space:]]*($|#) ]] && continue
 
-		read -r -a repo_args <<<"$line"
-		zyp addrepo --refresh --no-gpgcheck "${repo_args[@]}"
-		release_pkg=sles-release
+		stdin_repos+=("$line")
 	done
+	if [[ ${#stdin_repos[@]} -gt 0 ]]; then
+		repos=("${stdin_repos[@]}")
+		use_default_repos=0
+	fi
 fi
 
-if [[ $release_pkg == openSUSE-release ]]; then
-	zyp addrepo --refresh --no-gpgcheck \
-		https://download.opensuse.org/tumbleweed/repo/oss/ opensuse
-	extra_pkg+=(ca-certificates-mozilla coreutils gawk grep gzip sed xz)
+if [[ $use_default_repos == 1 ]]; then
+	pkg+=(ca-certificates-mozilla coreutils gawk grep gzip sed xz)
 fi
 
-set +e
+for repo in "${repos[@]}"; do
+	read -r -a repo_args <<<"$repo"
+	zyp addrepo --refresh --no-gpgcheck "${repo_args[@]}"
+done
 
-zyp install "$release_pkg" "${extra_pkg[@]}"
+trap on_exit EXIT
 
-chown -R "$CALLER":"$CALLER" "$ROOT"
+zyp install "${pkg[@]}"
 
-# remove setuid from /bin/mount and others, so vng boots with unshare
-find "$ROOT" -xdev -perm /6000 -exec chmod -s {} \;
+print_install_hint
