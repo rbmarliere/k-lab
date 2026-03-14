@@ -90,25 +90,43 @@ run() {
 	fi
 }
 
-os_release=/etc/os-release
+ID=
+ID_LIKE=
+VERSION_ID=
+etc_dir=/etc
 if use_root_install; then
-	os_release="$ROOT/etc/os-release"
+	etc_dir=$ROOT/etc
 fi
 
-[[ -r $os_release ]] || die "unable to read file: $os_release"
+if [[ -r $etc_dir/os-release ]]; then
+	# shellcheck disable=SC1090
+	. "$etc_dir/os-release"
+elif [[ -r $etc_dir/debian_version ]]; then
+	ID=debian
+	VERSION_ID=$(<"$etc_dir/debian_version")
+else
+	die "unable to detect distro under $etc_dir"
+fi
 
-ID=
-VERSION_ID=
-# shellcheck disable=SC1090
-. "$os_release"
+case "$ID" in
+debian | opensuse-tumbleweed | sles)
+	;;
+*)
+	case " ${ID_LIKE-} " in
+	*" suse "*)
+		ID=sles
+		;;
+	esac
+	;;
+esac
 
 case "$ID" in
 debian)
 	pkg_file="$BIN"/../pkg/debian
 	check_cmd=(dpkg -s)
 	repair_cmd=(dpkg --configure -a)
-	update_cmd=(apt update)
-	install_cmd=(apt install -y)
+	update_cmd=(env DEBIAN_FRONTEND=noninteractive apt-get update)
+	install_cmd=(env DEBIAN_FRONTEND=noninteractive apt-get install -y --allow-unauthenticated --force-yes)
 	;;
 opensuse-tumbleweed)
 	pkg_file="$BIN"/../pkg/tumbleweed
@@ -119,15 +137,9 @@ opensuse-tumbleweed)
 	;;
 sles)
 	case "${VERSION_ID:-}" in
-	12*)
-		pkg_file="$BIN"/../pkg/sles12
-		;;
-	15*)
-		pkg_file="$BIN"/../pkg/sles15
-		;;
-	16*)
-		pkg_file="$BIN"/../pkg/sles16
-		;;
+	# 12*)
+	# 	pkg_file="$BIN"/../pkg/sles12
+	# 	;;
 	*)
 		pkg_file="$BIN"/../pkg/sles
 		;;
@@ -156,7 +168,7 @@ mapfile -t packages < <(printf '%s\n' "${packages[@]}" | sort -u)
 
 missing=()
 for pkg in "${packages[@]}"; do
-	if ! run check "${check_cmd[@]}" "$pkg" >/dev/null; then
+	if ! run check "${check_cmd[@]}" "$pkg" >/dev/null 2>&1; then
 		missing+=("$pkg")
 	fi
 done
