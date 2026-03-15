@@ -26,6 +26,7 @@ set -- \
 	--rwdir "$OUTPUT_DIR=$OUTPUT_DIR" \
 	--force-9p \
 	--disable-microvm \
+	--no-virtme-ng-init \
 	--ssh-tcp \
 	--ssh "$VNG_PORT" \
 	"$@"
