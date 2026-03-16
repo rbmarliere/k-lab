@@ -2,4 +2,4 @@
 
 [[ -n ${ROOT-} ]] || exit 0
 
-"$BIN"/cross preflight-root "$ROOT" "$ARCH"
+"$BIN"/cross preflight-root "$ROOT" "${ARCH-}"
