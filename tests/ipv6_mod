@@ -1,7 +1,7 @@
 INCLUDE ../include/defaults.conf
 
 DEFAULTS OVERRIDE
-DEPS = tcpdump libnuma python-yaml python-jsonschema iperf
+DEPS = libcap tcpdump libnuma python3-yaml python3-jsonschema iperf iproute2 net-tools net-tools-deprecated ipv6toolkit
 VNG_ARGS = --user root
 ADD_CONFIG = ${BUILD_DIR}/tools/testing/selftests/net/config
 DIE_ON_FAILURE = 0
