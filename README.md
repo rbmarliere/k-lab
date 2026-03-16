@@ -187,7 +187,7 @@ For hooks, keep it simple:
 
 `include/suse.conf` is part of the default stack and provides the shared SUSE
 selectors `suse` and `suse-only`. Both use
-`useconfig:${KSOURCE_GIT}/${BRANCH}/config/${ARCH}/default`; `suse-only` also
+`useconfig:${KSOURCE_GIT}/${BRANCH}/config/<SUSE arch>/default`; `suse-only` also
 clears `ADD_CONFIG`. To use them, define `VERSION`, `PATCHLEVEL`, and `BRANCH`
 in the test file. The matching SUSE pre-ktest hook writes the minimal config
 fragment for the selected product version.

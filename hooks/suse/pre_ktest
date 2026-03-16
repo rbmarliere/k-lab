@@ -3,6 +3,8 @@
 VERSION=${VERSION-}
 PATCHLEVEL=${PATCHLEVEL-}
 
+"$BIN"/cross suse-arch "${ARCH-}" >/dev/null
+
 OUTPUT="$TMP_DIR"/suse-min.config
 touch "$OUTPUT"
 

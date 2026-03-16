@@ -163,6 +163,32 @@ vng_arch() {
 	riscv)
 		printf '%s\n' riscv64
 		;;
+	*)
+		die "unsupported virtme-ng arch: $arch"
+		;;
+	esac
+}
+
+suse_arch() {
+	local arch
+
+	arch=$(normalize_arch "$1")
+	case "$arch" in
+	x86_64)
+		printf '%s\n' x86_64
+		;;
+	arm64)
+		printf '%s\n' arm64
+		;;
+	powerpc)
+		printf '%s\n' ppc64le
+		;;
+	s390)
+		printf '%s\n' s390x
+		;;
+	*)
+		die "unsupported SUSE kernel-source arch: $arch"
+		;;
 	esac
 }
 
@@ -368,6 +394,7 @@ commands:
   preflight-vng <root> [arch]
   resolve-arch [root] [arch]
   root-arch <root>
+  suse-arch <arch>
   vng-arch <arch>
 EOF
 }
@@ -411,6 +438,10 @@ resolve-arch)
 root-arch)
 	[[ $# -eq 1 ]] || die "usage: cross root-arch <root>"
 	root_arch "$1"
+	;;
+suse-arch)
+	[[ $# -eq 1 ]] || die "usage: cross suse-arch <arch>"
+	suse_arch "$1"
 	;;
 vng-arch)
 	[[ $# -eq 1 ]] || die "usage: cross vng-arch <arch>"
