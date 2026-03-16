@@ -44,11 +44,8 @@ Bootstrap:
 
 5. From inside a Linux kernel worktree, run `kt`.
 
-`setup.sh` populates `tools/virtme-ng` and links `tools/ktest` to
+`setup.sh` builds `tools/virtme-ng` and links `tools/ktest` to
 `$LINUX_GIT/tools/testing/ktest`.
-
-Bare `kt` runs `include/defaults.conf`. `kt -n` prints the resolved config and
-exits.
 
 With no explicit `BUILD_TYPE`, the default path is `ktest.pl`'s `oldconfig`. If
 `$OUTPUT_DIR/.config` already exists, that file is reused; otherwise `ktest.pl`
@@ -57,8 +54,8 @@ creates an empty `.config` and runs `olddefconfig`.
 Examples:
 
 ```bash
-# run vng and wait for ssh connections
-kt
+# run the minimal vng test config
+kt vng
 
 # build and run all net selftests
 kt -D TEST:=all selftests/net
@@ -67,10 +64,11 @@ kt -D TEST:=all selftests/net
 kt -C -D BUILD_TYPE=defconfig
 
 # specify a compiler and ssh port to use
-kt -D CC:=gcc-13 -D VNG_PORT:=22001
+kt -D CC:=gcc-13 -D VNG_PORT:=22001 vng
 
-# build with CROSS_COMPILE_RISCV
-kt -D ROOT:=/roots/debian/trixie/riscv64
+# build with CROSS_COMPILE_RISCV (auto-detect arch from rootfs)
+# run the tests within ROOT
+kt -D ROOT:=/roots/debian/trixie/riscv64 selftests/net
 
 # build with the rootfs compiler (binfmt_misc)
 kt -D ROOT:=/roots/debian/sid/arm64 -D BUILD_IN_ROOT:=1
@@ -121,8 +119,9 @@ exists. Missing packages are auto-installed by default; set `AUTO_INSTALL_DEPS
 
 ## Writing Tests
 
-Most new tests should start from `include/defaults.conf` and then override only
-the bits they care about.
+`include/defaults.conf` is the shared base layer stack. Most new tests should
+include it and then define only the test-local pieces they care about, as
+`tests/vng` does.
 
 Minimal shape:
 
@@ -163,9 +162,6 @@ Use `=` for normal runtime options such as:
 
 `CC` is currently a global build setting. Set it at top level or with
 `-D CC=...`, not inside `TEST_START`.
-
-`include/defaults.conf` already pulls in the shared default layers. In most
-cases you should include `defaults.conf` and stop there.
 
 Useful helpers from `include/patterns.conf`:
 

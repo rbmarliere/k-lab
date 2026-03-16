@@ -1,0 +1,11 @@
+INCLUDE ../include/defaults.conf
+
+DEFAULTS IF NOT DEFINED TEST_BIN
+TEST_BIN = sleep infinity
+
+DEFAULTS IF NOT DEFINED TEST
+TEST := default
+
+TEST_START IF ${TEST} == default
+TEST_TYPE = test
+TEST = ${DO_TEST_SIMPLE}
