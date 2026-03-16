@@ -46,8 +46,10 @@ lookup_package() {
 		awk -v key="$dep" '
 		$0 ~ /^[[:space:]]*#/ || NF == 0 { next }
 		$1 == key {
-			print $2
 			found = 1
+			if (NF >= 2) {
+				print $2
+			}
 			exit
 		}
 		END {
@@ -163,10 +165,12 @@ fi
 packages=()
 for dep in "$@"; do
 	lookup_package "$pkg_file" "$dep"
-	packages+=("$lookup_package_result")
+	[[ -n $lookup_package_result ]] && packages+=("$lookup_package_result")
 done
 
 mapfile -t packages < <(printf '%s\n' "${packages[@]}" | sort -u)
+
+warn_fallback_packages "${packages[@]}"
 
 missing=()
 for pkg in "${packages[@]}"; do
@@ -182,7 +186,6 @@ if [[ ${#missing[@]} -gt 0 ]]; then
 		exit 1
 	fi
 
-	warn_fallback_packages "${missing[@]}"
 	echo "Installing missing dependency packages: ${missing[*]}"
 	if [[ ${#repair_cmd[@]} -gt 0 ]]; then
 		run install "${repair_cmd[@]}" || true
