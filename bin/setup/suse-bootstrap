@@ -35,12 +35,13 @@ zyp() {
 	"${cmd[@]}"
 }
 
-print_install_hint() {
-	local cmd=(sudo env ZYPP_CONF="$ZYPP_CONF_PATH/zypp.conf.klab" zypper --non-interactive --root "$ROOT" install PACKAGE...)
-
-	printf '\nTo install more packages later, run:\n'
-	printf '%q ' "${cmd[@]}"
-	printf '\n'
+write_zypper_helper() {
+	cat >"$ROOT/zypper" <<EOF
+#!/bin/bash
+ROOT=\$(dirname -- "\$(realpath -- "\${BASH_SOURCE[0]}")")
+sudo env ZYPP_CONF="\$ROOT/etc/zypp/zypp.conf.klab" zypper --non-interactive --root "\$ROOT" "\$@"
+EOF
+	chmod +x "$ROOT/zypper"
 }
 
 fix_ownership() {
@@ -94,5 +95,6 @@ done
 trap on_exit EXIT
 
 zyp install "${pkg[@]}"
+write_zypper_helper
 
-print_install_hint
+echo "To install more packages later, use: $ROOT/zypper install PACKAGE..."
