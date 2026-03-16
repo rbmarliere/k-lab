@@ -84,7 +84,7 @@ if [[ ! -t 0 ]]; then
 fi
 
 if [[ $use_default_repos == 1 ]]; then
-	pkg+=(ca-certificates-mozilla coreutils gawk grep gzip sed xz)
+	pkg+=(ca-certificates-mozilla coreutils gawk grep gzip sed system-group-hardware xz)
 fi
 
 for repo in "${repos[@]}"; do
