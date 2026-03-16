@@ -63,8 +63,11 @@ kt -D TEST:=all selftests/net
 # don't clean the current $OUTPUT_DIR, but force a defconfig
 kt -C -D BUILD_TYPE=defconfig
 
-# specify a compiler and ssh port to use
+# specify target and host compiler overrides and ssh port to use
 kt -D CC:=gcc-13 -D VNG_PORT:=22001 vng
+
+# old trees may also need host-tool overrides
+kt -D HOSTCC:=gcc-13 -D HOSTCFLAGS:=-fcommon -D VNG_PORT:=22001 vng
 
 # build with CROSS_COMPILE_RISCV (auto-detect arch from rootfs)
 # run the tests within ROOT
@@ -112,6 +115,9 @@ If you build for a non-native `ARCH` on the host, the host also needs a usable
 cross toolchain. By default, k-lab derives `CROSS_COMPILE` from `ARCH`;
 `setup.conf` may override that with `CROSS_COMPILE_*`.
 
+For older kernel trees, host-side build helpers may also need explicit
+`HOSTCC` or `HOSTCFLAGS` overrides.
+
 `DEPS` adds test-specific packages on top of the built-in base tool list.
 Package names go through the distro-specific maps under `pkg/` when a mapping
 exists. Missing packages are auto-installed by default; set `AUTO_INSTALL_DEPS
@@ -153,6 +159,8 @@ Use `=` for normal runtime options such as:
 - `BUILD_TYPE`
 - `ADD_CONFIG`
 - `CC`
+- `HOSTCC`
+- `HOSTCFLAGS`
 - `DEPS`
 - `VNG_MEM`
 - `VNG_ARGS`
@@ -160,8 +168,8 @@ Use `=` for normal runtime options such as:
 - `PREP_TEST`
 - `POST_BUILD_APPEND`
 
-`CC` is currently a global build setting. Set it at top level or with
-`-D CC=...`, not inside `TEST_START`.
+`CC`, `HOSTCC`, and `HOSTCFLAGS` are currently global build settings. Set them
+at top level or with `-D ...`, not inside `TEST_START`.
 
 Useful helpers from `include/patterns.conf`:
 

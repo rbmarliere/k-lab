@@ -24,6 +24,12 @@ fi
 if [[ -n ${CC-} ]]; then
 	make_cmd+=("CC=$CC")
 fi
+if [[ -n ${HOSTCC-} ]]; then
+	make_cmd+=("HOSTCC=$HOSTCC")
+fi
+if [[ -n ${HOSTCFLAGS-} ]]; then
+	make_cmd+=("HOSTCFLAGS=$HOSTCFLAGS")
+fi
 
 if [[ ${BUILD_IN_ROOT:-0} == 1 ]] && [[ -n ${ROOT-} ]]; then
 	exec "$BIN"/rootfs/make "$@"

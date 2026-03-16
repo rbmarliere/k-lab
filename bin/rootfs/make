@@ -24,6 +24,12 @@ fi
 if [[ -n ${CC-} ]]; then
 	cmd+=("CC=$CC")
 fi
+if [[ -n ${HOSTCC-} ]]; then
+	cmd+=("HOSTCC=$HOSTCC")
+fi
+if [[ -n ${HOSTCFLAGS-} ]]; then
+	cmd+=("HOSTCFLAGS=$HOSTCFLAGS")
+fi
 
 has_modules_install=0
 for arg in "$@"; do
