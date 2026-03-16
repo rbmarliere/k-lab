@@ -104,6 +104,8 @@ if [[ -r $etc_dir/os-release ]]; then
 elif [[ -r $etc_dir/debian_version ]]; then
 	ID=debian
 	VERSION_ID=$(<"$etc_dir/debian_version")
+elif [[ -r $etc_dir/SuSE-release ]]; then
+	ID=sles
 else
 	die "unable to detect distro under $etc_dir"
 fi
