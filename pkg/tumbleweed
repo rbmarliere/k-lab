@@ -9,5 +9,6 @@ libnuma libnuma-devel
 libssl libopenssl-devel
 llvm-dev llvm-devel
 make make
+pahole dwarves
 python3-yaml python3-PyYAML
 ssh openssh
