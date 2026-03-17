@@ -1,7 +1,8 @@
 #!/bin/bash -eu
 
 THIS_DIR=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")
-BUSYBOX_COMMIT=89f37ebe8c7f
+BUSYBOX_COMMIT=371fe9f
+BUSYBOX_REMOTE=https://github.com/mirror/busybox.git
 BUSYBOX_CFG=$THIS_DIR/busybox.config
 
 # shellcheck disable=SC1091
@@ -341,7 +342,7 @@ ensure_source_checkout() {
 	fi
 
 	mkdir -p -- "$(dirname -- "$BUSYBOX_SRC_DIR")"
-	git clone --branch master https://git.busybox.net/busybox "$BUSYBOX_SRC_DIR"
+	git clone --branch master "$BUSYBOX_REMOTE" "$BUSYBOX_SRC_DIR"
 	git -C "$BUSYBOX_SRC_DIR" checkout "$BUSYBOX_COMMIT"
 }
 
