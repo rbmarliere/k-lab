@@ -108,6 +108,11 @@ require_vng() {
 		return 1
 	fi
 
+	if ! PATH="$VNG_DIR:$VNG_DIR/virtme/guest/bin:$PATH" "$VNG_DIR/vng" --help >/dev/null 2>&1; then
+		env_error "virtme-ng is present but cannot start; check its Python dependencies in $VNG_DIR"
+		return 1
+	fi
+
 	return 0
 }
 
