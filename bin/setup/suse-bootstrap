@@ -1,7 +1,6 @@
 #!/bin/bash -eu
 
 ROOT=${ROOT:-/roots/tumbleweed}
-ZYPP_CONF_PATH=$ROOT/etc/zypp
 
 if [[ $(id -u) -gt 0 ]]; then
 	echo "ERROR: need uid=0"
@@ -13,24 +12,11 @@ if [[ -e $ROOT ]]; then
 fi
 
 mkdir -p \
-  "$ZYPP_CONF_PATH/repos.d" \
-  "$ZYPP_CONF_PATH/services.d" \
-  "$ZYPP_CONF_PATH/vars.d" \
+  "$ROOT/etc/zypp/repos.d" \
   "$ROOT/var/cache/zypp"
 
-tee "$ZYPP_CONF_PATH/zypp.conf.klab" >/dev/null <<EOF
-[main]
-configdir = $ZYPP_CONF_PATH
-reposdir = $ZYPP_CONF_PATH/repos.d
-servicesdir = $ZYPP_CONF_PATH/services.d
-varsdir = $ZYPP_CONF_PATH/vars.d
-cachedir = $ROOT/var/cache/zypp
-solver.onlyRequires = true
-installRecommends = false
-EOF
-
 zyp() {
-	cmd=(env ZYPP_CONF="$ZYPP_CONF_PATH/zypp.conf.klab" zypper --non-interactive --root "$ROOT" "$@")
+	cmd=(zypper --non-interactive --root "$ROOT" "$@")
 	echo "${cmd[@]}"
 	"${cmd[@]}"
 }
@@ -39,7 +25,7 @@ write_zypper_helper() {
 	cat >"$ROOT/zypper" <<EOF
 #!/bin/bash
 ROOT=\$(dirname -- "\$(realpath -- "\${BASH_SOURCE[0]}")")
-sudo env ZYPP_CONF="\$ROOT/etc/zypp/zypp.conf.klab" zypper --non-interactive --root "\$ROOT" "\$@"
+sudo zypper --non-interactive --root "\$ROOT" "\$@"
 EOF
 	chmod +x "$ROOT/zypper"
 }
