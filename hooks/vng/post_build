@@ -5,4 +5,4 @@
 cd "$OUTPUT_DIR"
 [[ -f modules.order ]] || exit 0
 
-virtme-prep-kdir-mods
+"$VNG_DIR"/bin/virtme-prep-kdir-mods
