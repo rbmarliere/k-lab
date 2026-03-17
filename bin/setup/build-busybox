@@ -286,15 +286,24 @@ ensure_toolchain() {
 	compiler=${prefix}gcc
 	glibc_pkg=$(glibc_package "$arch")
 
-	if uses_default_cross_compile "$arch"; then
-		maybe_install_rpm "$(compiler_package "$arch")"
-		maybe_install_rpm "$glibc_pkg"
-	fi
-
 	if [[ $compiler == */* ]]; then
 		compiler_path=$compiler
 	else
 		compiler_path=$(command -v -- "$compiler" || true)
+	fi
+
+	if uses_default_cross_compile "$arch"; then
+		if [[ -z $compiler_path || ! -x $compiler_path ]]; then
+			maybe_install_rpm "$(compiler_package "$arch")"
+
+			if [[ $compiler == */* ]]; then
+				compiler_path=$compiler
+			else
+				compiler_path=$(command -v -- "$compiler" || true)
+			fi
+		fi
+
+		maybe_install_rpm "$glibc_pkg"
 	fi
 
 	if [[ -z $compiler_path || ! -x $compiler_path ]]; then
