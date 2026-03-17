@@ -28,6 +28,19 @@ link_ktest() {
 	ln -sfn -- "$target" "$KTEST_DIR"
 }
 
+clone_vng() {
+	if [[ -e $VNG_DIR && ! -d $VNG_DIR ]]; then
+		die "VNG_DIR exists but is not a directory: $VNG_DIR"
+	fi
+	if [[ ! -d $VNG_DIR ]]; then
+		mkdir -p -- "$(dirname -- "$VNG_DIR")"
+		git clone --single-branch https://github.com/arighi/virtme-ng "$VNG_DIR"
+	fi
+	if [[ ! -f $VNG_DIR/Makefile ]]; then
+		die "virtme-ng checkout looks incomplete: $VNG_DIR"
+	fi
+}
+
 for cmd in git ln make; do
 	if ! command -v "$cmd" >/dev/null 2>&1; then
 		die "missing required command: $cmd"
@@ -36,7 +49,7 @@ done
 
 mkdir -p -- "$TOOLS_DIR"
 link_ktest
-"$THIS_DIR"/bin/setup/build-vng
+clone_vng
 cat <<EOF
 
 Setup complete.

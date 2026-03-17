@@ -46,7 +46,7 @@ Bootstrap:
 
 5. From inside a Linux kernel worktree, run `kt`.
 
-`setup.sh` builds `tools/virtme-ng` and links `tools/ktest` to
+`setup.sh` clones `tools/virtme-ng` and links `tools/ktest` to
 `$LINUX_GIT/tools/testing/ktest`.
 
 With no explicit `BUILD_TYPE`, the default path is `ktest.pl`'s `oldconfig`. If
