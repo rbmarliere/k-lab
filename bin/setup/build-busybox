@@ -375,7 +375,12 @@ EOF
 
 build_one() {
 	local arch=$1
-	local prefix target_dir
+	local prefix target_dir target_bin
+
+	target_bin=$BUSYBOX_DIR/$arch/bin/busybox
+	if [[ -x $target_bin ]]; then
+		return 0
+	fi
 
 	prefix=$(cross_compile_value "$arch")
 
@@ -434,12 +439,18 @@ esac
 [[ -r $BUSYBOX_CFG ]] || die "missing busybox config: $BUSYBOX_CFG"
 
 maybe_install_rpm glibc-devel-static
-ensure_source_checkout
-ensure_patch
-
+mapfile -t arches < <(resolve_arches "$@")
 mkdir -p -- "$BUSYBOX_DIR"
-while IFS= read -r arch; do
+for arch in "${arches[@]}"; do
+	if [[ ! -x $BUSYBOX_DIR/$arch/bin/busybox ]]; then
+		ensure_source_checkout
+		ensure_patch
+		break
+	fi
+done
+
+for arch in "${arches[@]}"; do
 	build_one "$arch"
-done < <(resolve_arches "$@")
+done
 
 print_warnings
