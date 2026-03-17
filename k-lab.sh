@@ -28,28 +28,75 @@ usage() {
 	echo
 	echo "run kt from within a Linux kernel worktree."
 	echo "with no test argument, kt runs $THIS_DIR/include/defaults.conf."
-	echo "test names support Bash tab completion from tests/."
+	echo "test names support Bash tab completion from tests/ and TEST_DIRS."
+}
+
+_kt_test_roots() {
+	local extra root
+	local -a roots=("$THIS_DIR/tests")
+
+	extra=$(read_setup_var TEST_DIRS || true)
+	if [[ -n $extra ]]; then
+		local IFS=:
+		local -a extra_roots=()
+		read -r -a extra_roots <<<"$extra"
+		for root in "${extra_roots[@]}"; do
+			[[ -n $root ]] || continue
+			if [[ $root != /* ]]; then
+				root=$(realpath -m -- "$THIS_DIR/$root")
+			else
+				root=$(realpath -m -- "$root")
+			fi
+			roots+=("$root")
+		done
+	fi
+
+	printf '%s\n' "${roots[@]}"
+}
+
+_kt_resolve_test_path() {
+	local file_path=$1
+	local root
+
+	if [[ $file_path = /* ]]; then
+		printf '%s\n' "$file_path"
+		return 0
+	fi
+
+	while read -r root; do
+		if [[ -e $root/$file_path ]]; then
+			printf '%s\n' "$root/$file_path"
+			return 0
+		fi
+	done < <(_kt_test_roots)
+
+	printf '%s\n' "$THIS_DIR/tests/$file_path"
 }
 
 _kt_completion() {
 	local cur=$2
-	local arr i file full_path
-	mapfile -t arr < <(cd "$THIS_DIR/tests" && compgen -f -- "$cur")
+	local root file full_path
+	local -A seen=()
 	COMPREPLY=()
-	for ((i = 0; i < ${#arr[@]}; ++i)); do
-		file=${arr[i]}
-		full_path=$file
-		if [[ $full_path != /* ]]; then
-			full_path=$THIS_DIR/tests/$full_path
-		fi
-		if [[ -f $full_path && $file == *.conf ]]; then
-			continue
-		fi
-		if [[ -d $full_path ]]; then
-			file=$file/
-		fi
-		COMPREPLY+=("$file")
-	done
+
+	while read -r root; do
+		[[ -d $root ]] || continue
+		while IFS= read -r file; do
+			[[ -n $file ]] || continue
+			full_path=$root/$file
+			if [[ -f $full_path && $file == *.conf ]]; then
+				continue
+			fi
+			if [[ -n ${seen[$file]-} ]]; then
+				continue
+			fi
+			seen[$file]=1
+			if [[ -d $full_path ]]; then
+				file=$file/
+			fi
+			COMPREPLY+=("$file")
+		done < <(cd "$root" && compgen -f -- "$cur")
+	done < <(_kt_test_roots)
 }
 
 _kt_vng_ports_from_dry_run() {
@@ -186,15 +233,7 @@ kt() {
 	if (($# == 0)); then
 		file_path="$THIS_DIR/include/defaults.conf"
 	else
-		if [[ ! -d $THIS_DIR/tests ]]; then
-			echo "ERROR: $THIS_DIR/tests: Directory not found" >&2
-			return 2
-		fi
-
-		file_path="$1"
-		if [[ ! "$file_path" = /* ]]; then
-			file_path="$THIS_DIR/tests/$file_path"
-		fi
+		file_path=$(_kt_resolve_test_path "$1")
 	fi
 	if [[ ! -e $file_path ]]; then
 		echo "ERROR: missing config: $file_path" >&2

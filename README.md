@@ -31,6 +31,8 @@ For upstream `ktest.pl` syntax and behavior, start with:
 - `THIS_DIR`
 
 Optional `CROSS_COMPILE_*` overrides may also be set there.
+Optional `TEST_DIRS` may be set to a colon-separated list of extra test roots
+for `kt` lookup and tab completion.
 
 Bootstrap:
 
