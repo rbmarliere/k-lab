@@ -34,7 +34,7 @@ set -- \
 rootfs=()
 arch_args=()
 resolved_arch=$("$BIN"/cross resolve-arch "${ROOT-}" "${ARCH-}")
-if [[ $has_root -eq 1 ]]; then
+if [[ $has_root -eq 1 && $(id -u) -ne 0 ]]; then
 	rootfs=(
 		unshare
 		--map-root-user
