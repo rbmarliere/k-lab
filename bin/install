@@ -145,9 +145,9 @@ opensuse-tumbleweed)
 	;;
 sles)
 	case "${VERSION_ID:-}" in
-	# 12*)
-	# 	pkg_files=("$BIN"/../pkg/sles12 "$BIN"/../pkg/tumbleweed)
-	# 	;;
+	12*)
+		pkg_files=("$BIN"/../pkg/sles12 "$BIN"/../pkg/sles "$BIN"/../pkg/tumbleweed)
+		;;
 	*)
 		pkg_files=("$BIN"/../pkg/sles "$BIN"/../pkg/tumbleweed)
 		;;
