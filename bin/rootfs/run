@@ -70,6 +70,9 @@ fi
 if [[ -n ${LC_ALL-} ]]; then
 	env_args+=(LC_ALL="$LC_ALL")
 fi
+if [[ -n ${DEBIAN_FRONTEND-} ]]; then
+	env_args+=(DEBIAN_FRONTEND="$DEBIAN_FRONTEND")
+fi
 
 # Keep the environment explicit and run the command via a real host-root
 # chroot so package managers see normal rootfs ownership semantics.

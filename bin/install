@@ -85,7 +85,11 @@ run() {
 	shift
 
 	if use_root_install; then
-		"$BIN"/rootfs/run "$@"
+		if [[ $mode != check ]] && [[ ${ID-} == debian ]]; then
+			DEBIAN_FRONTEND=noninteractive "$BIN"/rootfs/run "$@"
+		else
+			"$BIN"/rootfs/run "$@"
+		fi
 		return
 	fi
 
@@ -133,8 +137,8 @@ debian)
 	pkg_files=("$BIN"/../pkg/debian)
 	check_cmd=(dpkg -s)
 	repair_cmd=(dpkg --configure -a)
-	update_cmd=(env DEBIAN_FRONTEND=noninteractive apt-get update)
-	install_cmd=(env DEBIAN_FRONTEND=noninteractive apt-get install -y --allow-unauthenticated --force-yes)
+	update_cmd=(apt-get update)
+	install_cmd=(apt-get install -y --allow-unauthenticated --force-yes)
 	;;
 opensuse-tumbleweed)
 	pkg_files=("$BIN"/../pkg/tumbleweed)
