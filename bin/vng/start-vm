@@ -59,5 +59,7 @@ echo "PATH=\"$VNG_DIR:$VNG_DIR/virtme/guest/bin:\$PATH\" ${rootfs[*]} vng ${arch
 echo "PATH=\"$VNG_DIR:$VNG_DIR/virtme/guest/bin:\$PATH\" vng --ssh-tcp --ssh-client $VNG_PORT \"\$@\"" >"$TMP_DIR"/vng.ssh
 chmod +x "$TMP_DIR"/vng.ssh
 
+"$BIN"/vng/start-console
+
 setsid "${rootfs[@]}" "$BIN"/vng/cmd "${arch_args[@]}" "$@" -- sleep infinity </dev/null &>"$TMP_DIR"/vng.log &
 echo $! >"$TMP_DIR"/vng.pid
