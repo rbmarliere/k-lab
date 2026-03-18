@@ -3,5 +3,6 @@
 "$BIN"/cross preflight-vng "${ROOT-}" "$ARCH"
 "$BIN"/vng/min-config "$TMP_DIR"/vng-min.config "$ARCH"
 "$BIN"/vng/stop-vm -f
+rm -f -- "$TMP_DIR"/console "$TMP_DIR"/vng.log
 "$BIN"/vng/start-console
 ln -sfnT "$TMP_DIR"/vng.ssh "$BUILD_DIR"/ssh-"$VNG_PORT"
