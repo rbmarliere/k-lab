@@ -1,34 +1,59 @@
+VNG_PORT := 40404
+
 INCLUDE ../include/defaults.conf
 
 DEFAULTS OVERRIDE
-DEPS = libcap tcpdump libnuma python3-yaml python3-jsonschema iperf iproute2 net-tools net-tools-deprecated ipv6toolkit
+DEPS = libcap tcpdump libnuma python3-yaml python3-jsonschema iperf iproute2 net-tools net-tools-deprecated ipv6toolkit netsniff-ng smcroute dropwatch
 VNG_ARGS = --user root
-ADD_CONFIG = ${BUILD_DIR}/tools/testing/selftests/net/config
 DIE_ON_FAILURE = 0
 BUILD_TYPE = defconfig
 
-TEST_START
-TEST_NAME = ipv6_y
-TEST_TYPE = patchcheck
-CHECKOUT = ipv6_mod
-PATCHCHECK_TYPE = build
-PATCHCHECK_START = HEAD~9
-ADD_CONFIG = ${BUILD_DIR}/tools/testing/selftests/net/config ${CONFIG_DIR}/ipv6=y.config
+TEST := patchcheck
 
-TEST_START
-TEST_NAME = ipv6_n
+TEST_START IF ${TEST} == patchcheck
 TEST_TYPE = patchcheck
 CHECKOUT = ipv6_mod
 PATCHCHECK_TYPE = build
-PATCHCHECK_START = HEAD~9
+PATCHCHECK_START = HEAD~10
 ADD_CONFIG = ${BUILD_DIR}/tools/testing/selftests/net/config ${CONFIG_DIR}/ipv6=n.config
 
-TEST_START
-TEST_NAME = selftests
+TEST_START IF ${TEST} == patchcheck
+TEST_TYPE = patchcheck
+CHECKOUT = ipv6_mod
+PATCHCHECK_TYPE = build
+PATCHCHECK_START = HEAD~10
+ADD_CONFIG = ${BUILD_DIR}/tools/testing/selftests/net/config ${CONFIG_DIR}/ipv6=y.config
+
+TEST_START IF ${TEST} == patchcheck
+TEST_TYPE = patchcheck
+CHECKOUT = ipv6_mod
+PATCHCHECK_TYPE = build
+PATCHCHECK_START = HEAD~10
+ADD_CONFIG = ${BUILD_DIR}/tools/testing/selftests/net/forwarding/config ${CONFIG_DIR}/ipv6=n.config
+
+TEST_START IF ${TEST} == patchcheck
+TEST_TYPE = patchcheck
+CHECKOUT = ipv6_mod
+PATCHCHECK_TYPE = build
+PATCHCHECK_START = HEAD~10
+ADD_CONFIG = ${BUILD_DIR}/tools/testing/selftests/net/forwarding/config ${CONFIG_DIR}/ipv6=y.config
+
+TEST_START IF ${TEST} == selftests
 TEST_TYPE = test
 CHECKOUT = ipv6_mod
+ADD_CONFIG = ${BUILD_DIR}/tools/testing/selftests/net/config
 TEST = ${DO_TEST_SIMPLE}
 TEST_DIR = ${OUTPUT_DIR}/kselftest/kselftest_install
 POST_BUILD_APPEND = ${RUN} ${THIS_DIR}/hooks/selftests/net/post_build
-PREP_TEST = cd ${TEST_DIR} &&
-TEST_BIN = ./run_kselftest.sh -c net
+PREP_TEST = mount -t tmpfs tmp /tmp && cd ${TEST_DIR} && mkdir logs-n &&
+TEST_BIN = ./run_kselftest.sh -c net -p; cp /tmp/* logs-n
+
+TEST_START IF ${TEST} == selftests
+TEST_TYPE = test
+CHECKOUT = ipv6_mod
+ADD_CONFIG = ${BUILD_DIR}/tools/testing/selftests/net/forwarding/config
+TEST = ${DO_TEST_SIMPLE}
+TEST_DIR = ${OUTPUT_DIR}/kselftest/kselftest_install
+POST_BUILD_APPEND = ${RUN} ${THIS_DIR}/hooks/selftests/net/post_build
+PREP_TEST = mount -t tmpfs tmp /tmp && cd ${TEST_DIR} && mkdir logs-f &&
+TEST_BIN = ./run_kselftest.sh -c net/forwarding -p; cp /tmp/* logs-f

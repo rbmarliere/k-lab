@@ -1,4 +1,4 @@
 #!/bin/bash -eu
 
 "$BIN"/make headers
-"$BIN"/make -C tools/testing/selftests SKIP_TARGETS= TARGETS=net install
+"$BIN"/make -C tools/testing/selftests SKIP_TARGETS= TARGETS="net net/forwarding" install
