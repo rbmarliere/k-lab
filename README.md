@@ -68,9 +68,6 @@ kt -C -D BUILD_TYPE=defconfig
 # specify target and host compiler overrides and ssh port to use
 kt -D CC:=gcc-13 -D VNG_PORT:=22001 vng
 
-# old trees may also need host-tool overrides
-kt -D HOSTCC:=gcc-13 -D HOSTCFLAGS:=-fcommon -D VNG_PORT:=22001 vng
-
 # build with CROSS_COMPILE_RISCV (auto-detect arch from rootfs)
 # run the tests within ROOT
 kt -D ROOT:=/roots/debian/trixie/riscv64 selftests/net
@@ -99,26 +96,34 @@ links such as `tmp-$VNG_PORT` and `ssh-$VNG_PORT`, and `hooks/post_build`
 refreshes `compile_commands.json` to point at
 `compile_commands-$ARCH-$VNG_PORT.json`.
 
-## Host Requirements
+## Dependencies
 
-`k-lab` itself only assumes:
+In openSUSE Tumbleweed, the following packages should be enough (with the
+exception of armhf cross toolchain):
 
-- a real kernel git worktree at `LINUX_GIT`
-- `$LINUX_GIT/tools/testing/ktest/ktest.pl`
-- a completed `./setup.sh`
-- a matching `./bin/setup/build-busybox <arch>` for the arch you plan to boot
+```
+zypper install \
+	-t pattern devel_basis
 
-In practice, the host should also have:
-
-- `bash`, `git`, `make`, `python3`, `qemu`, `ssh`, ...
-- the dependencies required by `virtme-ng`
+zypper install \
+	bzip2 \
+	cross-aarch64-gcc15 \
+	cross-ppc64le-gcc15 \
+	cross-s390x-gcc15 \
+	cross-riscv64-gcc15 \
+	python3-argcomplete \
+	python3-requests \
+	qemu-arm \
+	qemu-extra \
+	qemu-linux-user \
+	qemu-ppc \
+	qemu-s390x \
+	sudo
+```
 
 If you build for a non-native `ARCH` on the host, the host also needs a usable
 cross toolchain. By default, k-lab derives `CROSS_COMPILE` from `ARCH`;
 `setup.conf` may override that with `CROSS_COMPILE_*`.
-
-For older kernel trees, host-side build helpers may also need explicit
-`HOSTCC` or `HOSTCFLAGS` overrides.
 
 `DEPS` adds test-specific packages on top of the built-in base tool list.
 Package names go through the distro-specific maps under `pkg/` when a mapping
