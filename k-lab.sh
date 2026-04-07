@@ -311,6 +311,12 @@ kt() {
 			'Do you want to continue? [Y/n] ' || return 1
 	fi
 
+	if [[ -f $tmp_dir/kt.log ]]; then
+		_kt_confirm \
+			"INFO: TMP_DIR already contains a previous kt.log: $tmp_dir/kt.log" \
+			"Do you want to continue and reuse $tmp_dir? [Y/n] " || return 1
+	fi
+
 	local output_dir
 	output_dir=$(printf '%s\n' "$dry_run_output" | _kt_dry_run_value OUTPUT_DIR)
 	if [[ -n $output_dir && -f $output_dir/.config ]]; then
@@ -386,12 +392,6 @@ kt() {
 		fi
 
 		trap 'rm -f "$lock_file"' EXIT
-
-		if [[ -f $tmp_dir/kt.log ]]; then
-			_kt_confirm \
-				"INFO: TMP_DIR already contains a previous kt.log: $tmp_dir/kt.log" \
-				"Do you want to continue and reuse $tmp_dir? [Y/n] " || exit 1
-		fi
 
 		command "$KTEST_PL" "${kargs[@]}" "$file_path"
 	)
