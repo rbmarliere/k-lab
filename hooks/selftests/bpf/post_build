@@ -1,4 +1,5 @@
 #!/bin/bash -eu
 
 "$BIN"/make headers
+git -C tools/testing/selftests clean -fdx
 "$BIN"/make -C tools/testing/selftests SKIP_TARGETS= TARGETS=bpf install
