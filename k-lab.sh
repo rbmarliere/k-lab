@@ -182,6 +182,28 @@ _kt_confirm() {
 	esac
 }
 
+# Ask what to do when BUILD_TYPE is oldconfig and OUTPUT_DIR/.config exists.
+# Returns 0 to continue, 1 to wipe, 2 to abort.
+_kt_preflight_oldconfig() {
+	local output_dir=$1
+	local reply
+
+	printf '%s\n' \
+		"INFO: BUILD_TYPE is oldconfig and ${output_dir}/.config" \
+		"      already exists. Reusing a stale config may silently" \
+		"      disable features required by this test." >&2
+	printf 'Continue [y], wipe and rebuild from defconfig [w], or abort [n]? ' >&2
+	if ! IFS= read -r reply; then
+		echo >&2
+		return 2
+	fi
+	case $reply in
+	"" | y | Y | yes | YES | Yes)	return 0 ;;
+	w | W)				return 1 ;;
+	*)	echo "Aborted." >&2;	return 2 ;;
+	esac
+}
+
 kt() {
 	local OPTIND opt
 	local kargs=()
@@ -287,6 +309,42 @@ kt() {
 		_kt_confirm \
 			"INFO: privileged path configured: ${summary_parts[*]}" \
 			'Do you want to continue? [Y/n] ' || return 1
+	fi
+
+	local output_dir
+	output_dir=$(printf '%s\n' "$dry_run_output" | _kt_dry_run_value OUTPUT_DIR)
+	if [[ -n $output_dir && -f $output_dir/.config ]]; then
+		local default_bt needs_prompt max_n bt_overrides
+		default_bt=$(printf '%s\n' "$dry_run_output" | _kt_dry_run_value BUILD_TYPE)
+		needs_prompt=0
+		# Any explicit per-test [N] override that IS oldconfig (or empty,
+		# which makes ktest.pl fall back to its built-in default)?
+		if printf '%s\n' "$dry_run_output" |
+		       grep -qE '^BUILD_TYPE\[[0-9]+\] = (oldconfig)?$'; then
+			needs_prompt=1
+		fi
+		# Default is oldconfig and at least one test has no explicit
+		# BUILD_TYPE override (so the default applies to it)?
+		# Note: only checks OUTPUT_DIR at the start of the run; does not
+		# catch a .config produced by an earlier test in the same run.
+		if [[ -z $default_bt || $default_bt == oldconfig ]]; then
+			max_n=$(printf '%s\n' "$dry_run_output" |
+			    grep -oP '\[\K[0-9]+(?=\] = )' | sort -n | tail -1)
+			bt_overrides=$(printf '%s\n' "$dry_run_output" |
+			    grep -cE '^BUILD_TYPE\[[0-9]+\] = ')
+			if [[ -z $max_n || $bt_overrides -lt $max_n ]]; then
+				needs_prompt=1
+			fi
+		fi
+		if ((needs_prompt)); then
+			_kt_preflight_oldconfig "$output_dir"
+			case $? in
+			0) ;;
+			1) rm -rf "$output_dir"
+			   kargs+=("-D" "BUILD_TYPE=defconfig") ;;
+			*) return 1 ;;
+			esac
+		fi
 	fi
 
 	(

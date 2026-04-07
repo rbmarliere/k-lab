@@ -49,10 +49,6 @@ Bootstrap:
 `setup.sh` clones `tools/virtme-ng` and links `tools/ktest` to
 `$LINUX_GIT/tools/testing/ktest`.
 
-With no explicit `BUILD_TYPE`, the default path is `ktest.pl`'s `oldconfig`. If
-`$OUTPUT_DIR/.config` already exists, that file is reused; otherwise `ktest.pl`
-creates an empty `.config` and runs `olddefconfig`.
-
 Examples:
 
 ```bash
