@@ -44,7 +44,7 @@ CHECKOUT = ipv6_mod
 ADD_CONFIG = ${BUILD_DIR}/tools/testing/selftests/net/config
 TEST = ${DO_TEST_SIMPLE}
 TEST_DIR = ${OUTPUT_DIR}/kselftest/kselftest_install
-POST_BUILD_APPEND = ${RUN} ${THIS_DIR}/hooks/selftests/net/post_build
+POST_BUILD_APPEND = ${RUN} ${THIS_DIR}/hooks/selftests/net/post-build
 PREP_TEST = mount -t tmpfs tmp /tmp && cd ${TEST_DIR} && mkdir logs-n &&
 TEST_BIN = ./run_kselftest.sh -c net -p; cp /tmp/* logs-n
 
@@ -54,6 +54,6 @@ CHECKOUT = ipv6_mod
 ADD_CONFIG = ${BUILD_DIR}/tools/testing/selftests/net/forwarding/config
 TEST = ${DO_TEST_SIMPLE}
 TEST_DIR = ${OUTPUT_DIR}/kselftest/kselftest_install
-POST_BUILD_APPEND = ${RUN} ${THIS_DIR}/hooks/selftests/net/post_build
+POST_BUILD_APPEND = ${RUN} ${THIS_DIR}/hooks/selftests/net/post-build
 PREP_TEST = mount -t tmpfs tmp /tmp && cd ${TEST_DIR} && mkdir logs-f &&
 TEST_BIN = ./run_kselftest.sh -c net/forwarding -p; cp /tmp/* logs-f

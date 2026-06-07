@@ -88,7 +88,7 @@ Before a real run, `kt` does its own `ktest.pl --dry-run`, preflights resolved
 and creates `TMP_DIR.lock` so two runs do not reuse the same output directory.
 
 Run artifacts live under `tmp/$VNG_PORT`. The kernel tree also gets convenience
-links such as `tmp-$VNG_PORT` and `ssh-$VNG_PORT`, and `hooks/post_build`
+links such as `tmp-$VNG_PORT` and `ssh-$VNG_PORT`, and `hooks/post-build`
 refreshes `compile_commands.json` to point at
 `compile_commands-$ARCH-$VNG_PORT.json`.
 
