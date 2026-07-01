@@ -80,7 +80,7 @@ done
 
 trap on_exit EXIT
 
-zyp install "${pkg[@]}"
+zyp install --no-recommends "${pkg[@]}"
 write_zypper_helper
 
 echo "To install more packages later, use: $ROOT/zypper install PACKAGE..."
