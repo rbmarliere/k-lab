@@ -52,6 +52,9 @@ Bootstrap:
 Examples:
 
 ```bash
+# run the default build config and refresh compile_commands.json
+kt
+
 # run the minimal vng test config
 kt vng
 
@@ -73,6 +76,9 @@ kt -D ROOT:=/roots/debian/sid/arm64 -D BUILD_IN_ROOT:=1
 
 # build a tumbleweed kernel
 kt -D ROOT:=/roots/tumbleweed -D TEST:=suse-only -D BRANCH:=stable
+
+# also refresh compile_commands.json after the build
+kt -D COMPILE_COMMANDS:=1 vng
 ```
 
 Wrapper options:
@@ -88,8 +94,9 @@ Before a real run, `kt` does its own `ktest.pl --dry-run`, preflights resolved
 and creates `TMP_DIR.lock` so two runs do not reuse the same output directory.
 
 Run artifacts live under `tmp/$VNG_PORT`. The kernel tree also gets convenience
-links such as `tmp-$VNG_PORT` and `ssh-$VNG_PORT`, and `hooks/post-build`
-refreshes `compile_commands.json` to point at
+links such as `tmp-$VNG_PORT` and `ssh-$VNG_PORT`. Plain `kt` refreshes
+`compile_commands.json` by default; named tests only do so when
+`COMPILE_COMMANDS=1`. The symlink points at
 `compile_commands-$ARCH-$VNG_PORT.json`.
 
 ## Dependencies

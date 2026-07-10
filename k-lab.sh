@@ -207,6 +207,7 @@ _kt_preflight_oldconfig() {
 kt() {
 	local OPTIND opt
 	local kargs=()
+	local compile_commands_set=0
 	local dry_run=0
 
 	if ! require_ktest; then
@@ -221,6 +222,9 @@ kt() {
 		C) kargs+=("-D" "BUILD_NOCLEAN=1") ;;
 		D)
 			case "$OPTARG" in
+			COMPILE_COMMANDS=* | COMPILE_COMMANDS:=*)
+				compile_commands_set=1
+				;;
 			ROOT=* | ARCH=* | VNG_PORT=*)
 				echo "ERROR: use -D ${OPTARG%%=*}:=${OPTARG#*=} for file-scoped overrides" >&2
 				return 2
@@ -253,6 +257,9 @@ kt() {
 
 	local file_path
 	if (($# == 0)); then
+		if ((compile_commands_set == 0)); then
+			kargs+=("-D" "COMPILE_COMMANDS:=1")
+		fi
 		file_path="$THIS_DIR/include/defaults.conf"
 	else
 		file_path=$(_kt_resolve_test_path "$1")
