@@ -204,6 +204,62 @@ _kt_preflight_oldconfig() {
 	esac
 }
 
+# Extract the value of "-D <name>:=<value>" from a kargs-style array (as
+# built by kt's getopts loop). Prints the last match, or nothing.
+_kt_kargs_override() {
+	local name=$1
+	shift
+	local val="" prev="" arg
+
+	for arg in "$@"; do
+		if [[ $prev == "-D" && $arg == "$name":=* ]]; then
+			val=${arg#"$name":=}
+		fi
+		prev=$arg
+	done
+
+	printf '%s\n' "$val"
+}
+
+# Derive a stable per-test id from the resolved config path plus any
+# ROOT/ARCH/TEST overrides (these affect file composition, so different
+# combinations must not share a TMP_DIR). Deterministic: reruns of the same
+# test with the same overrides reuse the same id.
+_kt_compute_klab_id() {
+	local file_path=$1
+	shift
+	local root arch hash sub name
+
+	root=$(_kt_kargs_override ROOT "$@")
+	arch=$(_kt_kargs_override ARCH "$@")
+
+	hash=$(printf '%s' "$file_path|$root|$arch" | sha256sum | cut -c1-8)
+
+	case $file_path in
+	"$THIS_DIR"/tests/*) sub=${file_path#"$THIS_DIR"/tests/} ;;
+	"$THIS_DIR"/*) sub=${file_path#"$THIS_DIR"/} ;;
+	*) sub=$file_path ;;
+	esac
+	name=$(printf '%s' "$sub" | tr -c 'A-Za-z0-9_.-' '_')
+
+	printf '%s\n' "${name}-${hash}"
+}
+
+# Find a free VNG_PORT in the range, skipping anything already in use
+# by a running vng/qemu instance or bound on the host.
+_kt_pick_free_port() {
+	local port
+
+	for ((port = 23000; port < 24000; port++)); do
+		if ! _kt_vng_port_in_use "$port" && ! _kt_tcp_port_in_use "$port"; then
+			printf '%s\n' "$port"
+			return 0
+		fi
+	done
+
+	return 1
+}
+
 kt() {
 	local OPTIND opt
 	local kargs=()
@@ -269,6 +325,19 @@ kt() {
 		return 1
 	fi
 
+	local klab_id
+	klab_id=$(_kt_compute_klab_id "$file_path" "${kargs[@]}")
+	kargs+=("-D" "KLAB_ID:=$klab_id")
+
+	if [[ -z $(_kt_kargs_override VNG_PORT "${kargs[@]}") ]]; then
+		local free_port
+		if ! free_port=$(_kt_pick_free_port); then
+			echo "ERROR: no free VNG_PORT found in the range 23000-23999" >&2
+			return 1
+		fi
+		kargs+=("-D" "VNG_PORT:=$free_port")
+	fi
+
 	if ((dry_run)); then
 		command "$KTEST_PL" "${kargs[@]}" "$file_path"
 		return $?
@@ -316,12 +385,6 @@ kt() {
 		_kt_confirm \
 			"INFO: privileged path configured: ${summary_parts[*]}" \
 			'Do you want to continue? [Y/n] ' || return 1
-	fi
-
-	if [[ -f $tmp_dir/kt.log ]]; then
-		_kt_confirm \
-			"INFO: TMP_DIR already contains a previous kt.log: $tmp_dir/kt.log" \
-			"Do you want to continue and reuse $tmp_dir? [Y/n] " || return 1
 	fi
 
 	local output_dir
