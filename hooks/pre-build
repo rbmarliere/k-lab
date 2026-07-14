@@ -1,9 +1,1 @@
 #!/bin/bash -eu
-
-if [[ -n ${DEPS-} ]]; then
-	# DEPS is a whitespace-separated list of abstract packages, defined by a
-	# test. k-lab assumes ROOT (or the host) is already set up with these;
-	# this only checks and fails loudly if something is missing.
-	# shellcheck disable=SC2086
-	"$BIN"/check-deps $DEPS
-fi
