@@ -29,6 +29,11 @@ done
 
 [[ $# -gt 0 ]] || die "missing command"
 resolve_root || exit 1
+rootfs_overlay_paths || exit 1
+
+# Make sure this run's private overlay over ROOT exists (idempotent) so
+# standalone callers do not need to mount first.
+"$BIN"/rootfs/mount-overlay
 
 chroot_args=()
 env_args=(
@@ -75,9 +80,10 @@ if [[ -n ${DEBIAN_FRONTEND-} ]]; then
 fi
 
 # Keep the environment explicit and run the command via a real host-root
-# chroot so package managers see normal rootfs ownership semantics.
+# chroot so package managers see normal rootfs ownership semantics. Chroot
+# into this run's private merged view of ROOT, never ROOT itself.
 if [[ $(id -u) -eq 0 ]]; then
-	exec chroot "${chroot_args[@]}" "$ROOT" /usr/bin/env -i "${env_args[@]}" "$@"
+	exec chroot "${chroot_args[@]}" "$ROOT_MERGED" /usr/bin/env -i "${env_args[@]}" "$@"
 fi
 
-exec sudo -n -- chroot "${chroot_args[@]}" "$ROOT" /usr/bin/env -i "${env_args[@]}" "$@"
+exec sudo -n -- chroot "${chroot_args[@]}" "$ROOT_MERGED" /usr/bin/env -i "${env_args[@]}" "$@"

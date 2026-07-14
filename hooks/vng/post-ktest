@@ -3,3 +3,9 @@
 "$BIN"/vng/stop-vm -f
 unlink "$BUILD_DIR"/ssh-"$VNG_PORT"
 unlink "$BUILD_DIR"/tmp-"$VNG_PORT"
+
+# Tear down this run's private overlay over ROOT now that the VM (which may
+# have held it open via 9p) is confirmed stopped.
+if [[ -n ${ROOT-} ]]; then
+	"$BIN"/rootfs/umount-overlay
+fi

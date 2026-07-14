@@ -9,9 +9,17 @@ for arg in "$@"; do
 done
 
 if [[ -n ${ROOT-} ]]; then
+	# Give this VM its own private, writable overlay over ROOT (see
+	# rootfs_overlay_paths in bin/env.sh) instead of passing --rw straight
+	# through to the shared, host-persistent ROOT tree: virtme-ng's --root
+	# is a raw 9p/virtiofs passthrough with no COW of its own, so two VMs
+	# booted with --root "$ROOT" --rw would both write back into the same
+	# host directory.
+	"$BIN"/rootfs/mount-overlay
+	root_merged=$TMP_DIR/rootfs/merged
 	set -- \
 		--user root \
-		--root "$ROOT" \
+		--root "$root_merged" \
 		--rw \
 		"$@"
 	has_root=1

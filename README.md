@@ -130,8 +130,9 @@ cross toolchain. By default, k-lab derives `CROSS_COMPILE` from `ARCH`;
 
 `DEPS` adds test-specific packages on top of the built-in base tool list.
 Package names go through the distro-specific maps under `pkg/` when a mapping
-exists. Missing packages are auto-installed by default; set `AUTO_INSTALL_DEPS
-= 0` if you want missing packages to stay a hard failure.
+exists. k-lab assumes `ROOT` (or the host, when not using `ROOT`) already has
+everything installed; it only checks and fails loudly listing what is
+missing. It never installs or otherwise modifies `ROOT`.
 
 ## Writing Tests
 
@@ -211,6 +212,17 @@ fragment for the selected product version.
 Set `ROOT := /path/to/rootfs` to run against an external root filesystem
 instead of the host.
 
+`ROOT` itself is treated as a read-only, shared base image: every run mounts
+its own private, throwaway copy-on-write overlay on top of it (an
+`overlayfs` merged view, upper/work dirs under that run's `TMP_DIR`) and
+only ever mounts, `chroot`s into, or writes to that private view -- never
+`ROOT` directly. This is what makes it safe to point multiple concurrent
+runs (e.g. several agents) at the same `ROOT` at once: they never share a
+mountpoint, and nothing one run writes (installed packages, kernel modules,
+temp files) is visible to another run or persisted back into `ROOT`. Keep
+`ROOT` itself provisioned with everything your tests need ahead of time (see
+Dependencies above); k-lab does not modify it.
+
 By default, builds still happen on the host. Set `BUILD_IN_ROOT = 1` if you
 want the kernel build to happen inside the rootfs instead.
 
@@ -225,11 +237,13 @@ example `./bin/setup/build-busybox x86_64` or
 `./bin/setup/build-busybox arm64`.
 
 `bin/rootfs/shell` is a convenience wrapper around the same mount and `chroot`
-path used by normal rootfs-backed runs:
+path used by normal rootfs-backed runs. It needs `TMP_DIR` set to a scratch
+directory (this is where its private overlay lives); use a distinct
+`TMP_DIR` per concurrent session against the same `ROOT`:
 
 ```bash
-ROOT=/roots/debian/trixie/x86_64 ./bin/rootfs/shell
-ROOT=/roots/debian/trixie/x86_64 ./bin/rootfs/shell -- uname -a
+ROOT=/roots/debian/trixie/x86_64 TMP_DIR=/tmp/rootfs-shell ./bin/rootfs/shell
+ROOT=/roots/debian/trixie/x86_64 TMP_DIR=/tmp/rootfs-shell ./bin/rootfs/shell -- uname -a
 ```
 
 `bin/setup/debootstrap` is a small helper for Debian rootfs creation:
@@ -252,8 +266,8 @@ Other options include vng's own `--root` for Ubuntu cloud images,
 [mkosi](https://github.com/systemd/mkosi), etc.
 
 Runtime privilege escalation is centralized in `bin/run`, which uses `sudo -n`.
-There is no interactive fallback. In practice that covers package installation
-plus the rootfs mount, umount, and `chroot` helpers. For the current
+There is no interactive fallback. In practice that covers the per-run overlay
+mount plus the rootfs mount, umount, and `chroot` helpers. For the current
 `virtme-ng` path, `ROOT` should therefore point at a rootfs tree owned by the
 calling uid, not just a directory that happens to be readable and writable.
 
@@ -262,8 +276,12 @@ For the built-in flows, the expected sudoers allowlist is:
 - `/usr/bin/chroot`
 - `/usr/bin/mount`
 - `/usr/bin/umount`
-- `/usr/bin/apt-get` on Debian hosts (untested)
-- `/usr/bin/zypper` on Tumbleweed systems
+
+`bin/check-deps` (used automatically by `hooks/pre-build` for `DEPS`) only
+ever reads package state, so it needs no extra sudoers entries beyond the
+ones above. `bin/install` is a separate, manual package-installer helper (not
+run automatically); if you use it, it additionally needs whatever it
+`exec`s for your distro, e.g. `/usr/bin/apt-get` or `/usr/bin/zypper`.
 
 Some setup helpers also use `sudo`; keep that in mind when preparing a new
 host.
