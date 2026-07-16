@@ -2,28 +2,8 @@
 
 [[ -n ${ROOT-} ]] || exit 0
 
-if [[ ${BUILD_IN_ROOT:-0} == 1 ]]; then
-	"$BIN"/rootfs/make modules_install
-else
-	# Write into this run's private overlay view of ROOT, never ROOT itself
-	# (see rootfs_overlay_paths in bin/env.sh); already mounted by
-	# hooks/rootfs/pre-ktest, but ensure it here too for direct callers.
-	"$BIN"/rootfs/mount-overlay
-	root_merged=$TMP_DIR/rootfs/merged
-
-	kernelrelease=$("$BIN"/make -s kernelrelease)
-	modlib="$root_merged/lib/modules/$kernelrelease"
-
-	# https://build.opensuse.org/projects/openSUSE:Factory/packages/kmod/files/README.usrmerge
-	if [[ -L $root_merged/lib ]]; then
-		case $(readlink -- "$root_merged/lib") in
-		usr/lib | /usr/lib)
-			modlib="$root_merged/usr/lib/modules/$kernelrelease"
-			;;
-		esac
-	elif [[ -d $root_merged/usr/lib/modules && ! -e $root_merged/lib/modules ]]; then
-		modlib="$root_merged/usr/lib/modules/$kernelrelease"
-	fi
-
-	"$BIN"/make DEPMOD=true INSTALL_MOD_PATH="$root_merged" MODLIB="$modlib" modules_install
-fi
+# ROOT is root-owned; install modules via a real root chroot into this run's
+# private overlay view (see bin/rootfs/run), never into ROOT itself. This
+# also means the usrmerge /lib -> /usr/lib symlink (if any) is resolved
+# naturally by the real install, with no manual detection needed.
+"$BIN"/rootfs/make DEPMOD=true modules_install

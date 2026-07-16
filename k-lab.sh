@@ -151,8 +151,8 @@ _kt_preflight_root() {
 		echo "ERROR: ROOT is not a directory: $root" >&2
 		return 1
 	fi
-	if [[ ! -r $root || ! -w $root || ! -x $root ]]; then
-		echo "ERROR: ROOT must be readable, writable, and searchable by $(id -un): $root" >&2
+	if [[ ! -r $root || ! -x $root ]]; then
+		echo "ERROR: ROOT must be readable and searchable by $(id -un): $root" >&2
 		return 1
 	fi
 

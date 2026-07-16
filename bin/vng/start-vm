@@ -1,73 +1,23 @@
 #!/bin/bash -eu
 
-has_root=0
-for arg in "$@"; do
-	if [[ $arg == "--root" ]]; then
-		has_root=1
-		break
-	fi
-done
-
-if [[ -n ${ROOT-} ]]; then
-	# Give this VM its own private, writable overlay over ROOT (see
-	# rootfs_overlay_paths in bin/env.sh) instead of passing --rw straight
-	# through to the shared, host-persistent ROOT tree: virtme-ng's --root
-	# is a raw 9p/virtiofs passthrough with no COW of its own, so two VMs
-	# booted with --root "$ROOT" --rw would both write back into the same
-	# host directory.
-	"$BIN"/rootfs/mount-overlay
-	root_merged=$TMP_DIR/rootfs/merged
-	set -- \
-		--user root \
-		--root "$root_merged" \
-		--rw \
-		"$@"
-	has_root=1
-fi
+# Give this VM its own private, writable overlay over ROOT (see
+# rootfs_overlay_paths in bin/env.sh) instead of passing --rw straight
+# through to the shared, host-persistent ROOT tree: virtme-ng's --root
+# is a raw 9p/virtiofs passthrough with no COW of its own, so two VMs
+# booted with --root "$ROOT" --rw would both write back into the same
+# host directory.
+"$BIN"/rootfs/mount-overlay
+root_merged=$TMP_DIR/rootfs/merged
 
 set -- \
-	--verbose \
 	--run "$OUTPUT_DIR" \
-	--network user \
-	--memory "${VNG_MEM:-1G}" \
 	--rwdir "$BUILD_DIR=$BUILD_DIR" \
 	--rwdir "$OUTPUT_DIR=$OUTPUT_DIR" \
-	--force-9p \
-	--disable-microvm \
-	--no-virtme-ng-init \
-	--ssh-tcp \
-	--ssh "$VNG_PORT" \
 	"$@"
 
-rootfs=()
-arch_args=()
-resolved_arch=$("$BIN"/cross resolve-arch "${ROOT-}" "${ARCH-}")
-if [[ $has_root -eq 1 && $(id -u) -ne 0 ]]; then
-	rootfs=(
-		unshare
-		--map-root-user
-		--map-auto
-		--mount
-		--
-	)
-fi
-
-"$BIN"/cross preflight-vng "${ROOT-}" "$resolved_arch"
-arch_args=(
-	--busybox "$("$BIN"/cross busybox-path "$resolved_arch")"
-)
-if "$BIN"/cross is-foreign "$resolved_arch"; then
-	arch_args=(
-		--arch "$("$BIN"/cross vng-arch "$resolved_arch")"
-		"${arch_args[@]}"
-	)
-fi
-
-echo "PATH=\"$VNG_DIR:$VNG_DIR/virtme/guest/bin:\$PATH\" ${rootfs[*]} vng ${arch_args[*]} $*" >"$TMP_DIR"/vng.cmd
-echo "PATH=\"$VNG_DIR:$VNG_DIR/virtme/guest/bin:\$PATH\" vng --ssh-tcp --ssh-client $VNG_PORT \"\$@\"" >"$TMP_DIR"/vng.ssh
-chmod +x "$TMP_DIR"/vng.ssh
+echo "$BIN/vng/cmd $root_merged $* -- sleep infinity" >"$TMP_DIR"/vng.cmd
 
 "$BIN"/vng/start-console
 
-setsid "${rootfs[@]}" "$BIN"/vng/cmd "${arch_args[@]}" "$@" -- sleep infinity </dev/null &>"$TMP_DIR"/vng.log &
+setsid "$BIN"/vng/cmd "$root_merged" "$@" -- sleep infinity </dev/null &>"$TMP_DIR"/vng.log &
 echo $! >"$TMP_DIR"/vng.pid

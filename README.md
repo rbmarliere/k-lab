@@ -262,17 +262,30 @@ Other options include vng's own `--root` for Ubuntu cloud images,
 [alpine-make-rootfs](https://github.com/alpinelinux/alpine-make-rootfs),
 [mkosi](https://github.com/systemd/mkosi), etc.
 
-Runtime privilege escalation is centralized in `bin/run`, which uses `sudo -n`.
-There is no interactive fallback. In practice that covers the per-run overlay
-mount plus the rootfs mount, umount, and `chroot` helpers. For the current
-`virtme-ng` path, `ROOT` should therefore point at a rootfs tree owned by the
-calling uid, not just a directory that happens to be readable and writable.
+Runtime privilege escalation is centralized in `bin/run`, which uses `sudo -n`
+(optionally with `--preserve-env=VAR[,VAR...]`, forwarded to sudo's own
+`--preserve-env`). There is no interactive fallback. In practice that covers
+the per-run overlay mount, the rootfs mount/umount/chroot helpers, and the
+`vng` invocation itself. `ROOT` is expected to be owned by root (uid 0), like
+`bin/setup/debootstrap` and `bin/setup/suse-bootstrap` leave it: it is a
+shared, read-only base image with a per-run, invoker-owned overlay on top
+(see `rootfs_overlay_paths` in `bin/env.sh`), so nothing ever needs to write
+into `ROOT` itself.
 
 For the built-in flows, the expected sudoers allowlist is:
 
 - `/usr/bin/chroot`
 - `/usr/bin/mount`
 - `/usr/bin/umount`
+- `/usr/bin/touch`
+- the `vng` binary under `tools/virtme-ng` (resolve the symlink to its real
+  path for the sudoers entry)
+
+The `vng` entry needs a `SETENV:` tag (or an equivalent `Defaults
+!env_reset`/`env_keep` override) so that `bin/run --as-root
+--preserve-env=PATH -- vng ...` actually preserves `PATH` under sudo; `vng`
+relies on it to find its own sibling tools (e.g. `virtme/guest/bin`) via
+`PATH`-based lookups.
 
 Some setup helpers also use `sudo`; keep that in mind when preparing a new
 host.

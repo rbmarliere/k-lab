@@ -37,8 +37,8 @@ ensure_resolv_conf_target() {
 		return 0
 	fi
 
-	touch "$target" || {
-		echo "ERROR: unable to create $target as $(id -un)" >&2
+	"$BIN"/run --as-root touch "$target" || {
+		echo "ERROR: unable to create $target" >&2
 		exit 1
 	}
 }
