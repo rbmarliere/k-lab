@@ -1,0 +1,125 @@
+#!/bin/bash -eu
+
+THIS_DIR=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")
+QEMU_TAG=v11.1.0-rc0
+QEMU_REMOTE=https://github.com/qemu/qemu.git
+QEMU_PATCHES_DIR=$THIS_DIR/qemu-patches
+
+# shellcheck disable=SC1091
+source "$THIS_DIR/../env.sh"
+
+QEMU_SRC_DIR=$QEMU_DIR/src
+QEMU_BUILD_DIR=$QEMU_DIR/build
+
+die() {
+	echo "ERROR: $*" >&2
+	exit 1
+}
+
+usage() {
+	cat <<EOF
+usage: $(basename -- "$0") [arch ...]
+
+Build QEMU system-emulation binaries for virtme-ng runs, from source.
+
+If no architectures are specified, all supported architectures are built:
+  x86_64 arm64 arm powerpc s390 riscv
+EOF
+}
+
+maybe_install_rpm() {
+	local pkg=$1
+
+	command -v rpm >/dev/null 2>&1 || return 0
+	command -v zypper >/dev/null 2>&1 || return 0
+
+	if ! rpm -q "$pkg" &>/dev/null; then
+		sudo zypper install -y "$pkg" || die "failed to install package: $pkg"
+	fi
+}
+
+build_all_arches() {
+	printf '%s\n' x86_64 arm64 arm powerpc s390 riscv
+}
+
+resolve_targets() {
+	local arch
+	local -a arches=("$@")
+
+	if [[ ${#arches[@]} -eq 0 ]]; then
+		mapfile -t arches < <(build_all_arches)
+	fi
+
+	for arch in "${arches[@]}"; do
+		"$BIN"/cross qemu-arch "$arch"
+	done | sort -u
+}
+
+apply_patches() {
+	local patches=()
+	mapfile -t patches < <(find "$QEMU_PATCHES_DIR" -maxdepth 1 -name '*.patch' | sort)
+	[[ ${#patches[@]} -eq 0 ]] && return 0
+	git -C "$QEMU_SRC_DIR" am --keep-cr "${patches[@]}"
+}
+
+ensure_source_checkout() {
+	if [[ -d $QEMU_SRC_DIR/.git ]]; then
+		git -C "$QEMU_SRC_DIR" fetch --depth 1 origin "$QEMU_TAG"
+		git -C "$QEMU_SRC_DIR" checkout -f FETCH_HEAD
+		apply_patches
+		return 0
+	fi
+
+	mkdir -p -- "$(dirname -- "$QEMU_SRC_DIR")"
+	git clone --depth 1 --branch "$QEMU_TAG" "$QEMU_REMOTE" "$QEMU_SRC_DIR"
+	apply_patches
+}
+
+case "${1-}" in
+-h | --help | help)
+	usage
+	exit 0
+	;;
+esac
+
+mapfile -t targets < <(resolve_targets "$@")
+
+missing=()
+for target in "${targets[@]}"; do
+	[[ -x $QEMU_DIR/bin/qemu-system-$target ]] || missing+=("$target")
+done
+[[ ${#missing[@]} -gt 0 ]] || exit 0
+
+for pkg in meson ninja glib2-devel pkg-config; do
+	maybe_install_rpm "$pkg"
+done
+
+ensure_source_checkout
+
+target_list=$(IFS=,; echo "${missing[*]/%/-softmmu}")
+bins=("${missing[@]/#/qemu-system-}")
+
+mkdir -p -- "$QEMU_BUILD_DIR"
+(
+	cd "$QEMU_BUILD_DIR"
+	"$QEMU_SRC_DIR"/configure \
+		--prefix="$QEMU_DIR" \
+		--target-list="$target_list" \
+		--disable-gtk \
+		--disable-sdl \
+		--disable-vnc \
+		--disable-spice \
+		--disable-opengl \
+		--disable-virglrenderer \
+		--disable-docs \
+		--disable-guest-agent \
+		--disable-tools \
+		--enable-slirp
+
+	ninja -j"$(nproc)" "${bins[@]}"
+
+	mkdir -p -- "$QEMU_DIR/bin"
+	for bin in "${bins[@]}"; do
+		install -Dm755 -- "$bin" "$QEMU_DIR/bin/$bin"
+	done
+)

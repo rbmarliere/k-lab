@@ -1,0 +1,152 @@
+From 3097f61fd7f9767b7f74615662de6d8ce611fa85 Mon Sep 17 00:00:00 2001
+From: "Ricardo B. Marlière (SUSE)" <ricardo@marliere.net>
+Date: Fri, 17 Jul 2026 11:05:14 -0300
+Subject: [PATCH] hw/virtio/vhost: Keep TCG code coherent with vhost-user
+ writes
+
+A vhost-user backend writes guest RAM from a separate process, so those
+writes never pass through QEMU's memory API. Under TCG this bypasses the
+DIRTY_MEMORY_CODE self-modifying-code detection that vhost_section()
+deliberately ignores for vhost devices. When the guest then executes code
+the backend just wrote, TCG runs stale translations and the guest crashes
+with random faults. This is trivially hit by booting a guest whose root
+filesystem is served over virtio-fs, where early userspace executes
+straight out of backend-written pages.
+
+Reuse the backend's existing dirty log to close the gap. When a vhost-user
+device that supports VHOST_F_LOG_ALL starts under TCG, enable logging so
+the backend records the pages it writes, and invalidate the matching
+translations while scanning the log, exactly as the normal DMA path does
+via invalidate_and_set_dirty(). Expose vhost_tcg_sync_dirty_code() so the
+completion path can reconcile TCG's view before the guest runs, and undo
+the logging when the device stops.
+
+This has no effect on KVM, on non-vhost-user backends, or when logging is
+already enabled for migration.
+---
+ hw/virtio/vhost.c         | 49 +++++++++++++++++++++++++++++++++++++++
+ include/hw/virtio/vhost.h | 13 +++++++++++
+ 2 files changed, 62 insertions(+)
+
+diff --git a/hw/virtio/vhost.c b/hw/virtio/vhost.c
+index af41841b5290..f06352e7744e 100644
+--- a/hw/virtio/vhost.c
++++ b/hw/virtio/vhost.c
+@@ -29,6 +29,8 @@
+ #include "system/dma.h"
+ #include "system/memory.h"
+ #include "system/ramblock.h"
++#include "system/tcg.h"
++#include "exec/translation-block.h"
+ #include "trace.h"
+ 
+ /* enabled until disconnected backend stabilizes */
+@@ -122,6 +124,16 @@ static void vhost_dev_sync_region(struct vhost_dev *dev,
+             section_offset = page_addr - section->offset_within_address_space;
+             mr_offset = section_offset + section->offset_within_region;
+             memory_region_set_dirty(section->mr, mr_offset, VHOST_LOG_PAGE);
++            if (dev->tcg_code_sync) {
++                /*
++                 * The backend wrote this page; drop any stale TCG
++                 * translations for it, as the normal DMA write path does
++                 * via invalidate_and_set_dirty().
++                 */
++                ram_addr_t ram = memory_region_get_ram_addr(section->mr) +
++                                 mr_offset;
++                tb_invalidate_phys_range(NULL, ram, ram + VHOST_LOG_PAGE - 1);
++            }
+             log &= ~(0x1ull << bit);
+         }
+         addr += VHOST_LOG_CHUNK;
+@@ -288,6 +300,22 @@ static void vhost_log_sync_range(struct vhost_dev *dev,
+     }
+ }
+ 
++/*
++ * TCG coherency: sync a vhost device's dirty log, invalidating TCG
++ * translations for any guest RAM the backend wrote since the last sync (see
++ * vhost_dev_sync_region()).
++ *
++ * Called from the device completion path before the guest is interrupted, so
++ * the guest never executes stale translations of pages the backend just wrote.
++ * Cheap when nothing was written: the log scan skips empty chunks.
++ */
++void vhost_tcg_sync_dirty_code(struct vhost_dev *dev)
++{
++    if (dev && dev->tcg_code_sync && dev->log_enabled && dev->started) {
++        vhost_log_sync_range(dev, 0, ~0x0ULL);
++    }
++}
++
+ static uint64_t vhost_get_log_size(struct vhost_dev *dev)
+ {
+     uint64_t log_size = 0;
+@@ -2201,6 +2229,22 @@ int vhost_dev_start(struct vhost_dev *hdev, VirtIODevice *vdev, bool vrings)
+     hdev->started = true;
+     hdev->vdev = vdev;
+ 
++    /*
++     * Under TCG, a vhost-user backend writes guest RAM from a separate
++     * process, bypassing TCG's DIRTY_MEMORY_CODE self-modifying-code
++     * detection (see vhost_section()). If the guest executes code that the
++     * backend just wrote (e.g. a virtiofs root filesystem), TCG may run
++     * stale translations and crash. Enable the backend's dirty log so we can
++     * learn which pages it wrote and invalidate the corresponding
++     * translations; see vhost_tcg_sync_dirty_code().
++     */
++    if (tcg_enabled() && !hdev->log_enabled &&
++        hdev->vhost_ops->backend_type == VHOST_BACKEND_TYPE_USER &&
++        vhost_dev_has_feature_ex(hdev, VHOST_F_LOG_ALL)) {
++        hdev->log_enabled = true;
++        hdev->tcg_code_sync = true;
++    }
++
+     r = vhost_dev_set_features(hdev, hdev->log_enabled);
+     if (r < 0) {
+         goto fail_features;
+@@ -2358,6 +2402,11 @@ static int do_vhost_dev_stop(struct vhost_dev *hdev, VirtIODevice *vdev,
+     }
+     vhost_stop_config_intr(hdev);
+     vhost_log_put(hdev, true);
++    if (hdev->tcg_code_sync) {
++        /* We enabled logging for TCG coherency; undo that on stop. */
++        hdev->log_enabled = false;
++        hdev->tcg_code_sync = false;
++    }
+     hdev->started = false;
+     vdev->vhost_started = false;
+     hdev->vdev = NULL;
+diff --git a/include/hw/virtio/vhost.h b/include/hw/virtio/vhost.h
+index 684bafcaadda..255603a2205d 100644
+--- a/include/hw/virtio/vhost.h
++++ b/include/hw/virtio/vhost.h
+@@ -110,6 +110,12 @@ struct vhost_dev {
+     /* @started: is the vhost device started? */
+     bool started;
+     bool log_enabled;
++    /*
++     * @tcg_code_sync: logging was enabled by us (not migration) to keep TCG
++     * translations coherent with backend writes to guest RAM. See
++     * vhost_dev_start() and vhost_tcg_sync_dirty_code().
++     */
++    bool tcg_code_sync;
+     uint64_t log_size;
+     Error *migration_blocker;
+     const VhostOps *vhost_ops;
+@@ -210,6 +216,13 @@ static inline int vhost_dev_set_vring_enable(struct vhost_dev *hdev, int enable)
+     return hdev->vhost_ops->vhost_set_vring_enable(hdev, enable);
+ }
+ 
++/*
++ * TCG coherency: invalidate TCG translations for any guest RAM that this
++ * logging-enabled vhost-user backend has written since the last call.
++ * No-op unless the device is in TCG code-sync mode.
++ */
++void vhost_tcg_sync_dirty_code(struct vhost_dev *dev);
++
+ /**
+  * vhost_dev_start() - start the vhost device
+  * @hdev: common vhost_dev structure
+-- 
+2.55.0
+

@@ -169,6 +169,42 @@ vng_arch() {
 	esac
 }
 
+qemu_arch() {
+	local arch
+
+	arch=$(normalize_arch "$1")
+	case "$arch" in
+	x86_64)
+		printf '%s\n' x86_64
+		;;
+	arm64)
+		printf '%s\n' aarch64
+		;;
+	arm)
+		printf '%s\n' arm
+		;;
+	powerpc)
+		printf '%s\n' ppc64
+		;;
+	s390)
+		printf '%s\n' s390x
+		;;
+	riscv)
+		printf '%s\n' riscv64
+		;;
+	*)
+		die "unsupported qemu arch: $arch"
+		;;
+	esac
+}
+
+qemu_bin_path() {
+	local arch
+
+	arch=$(qemu_arch "$1")
+	printf '%s\n' "$QEMU_DIR/bin/qemu-system-$arch"
+}
+
 suse_arch() {
 	local arch
 
@@ -368,12 +404,14 @@ preflight_root() {
 preflight_vng() {
 	local root=${1-}
 	local arch=${2-}
-	local busybox
+	local busybox qemu_bin
 
 	root=$(normalize_root "$root")
 	arch=$(resolve_arch "$root" "$arch")
 	busybox=$(busybox_path "$arch")
 	[[ -x $busybox ]] || die "missing static busybox: $busybox (run $THIS_DIR/bin/setup/build-busybox $arch)"
+	qemu_bin=$(qemu_bin_path "$arch")
+	[[ -x $qemu_bin ]] || die "missing qemu binary: $qemu_bin (run $THIS_DIR/bin/setup/build-qemu $arch)"
 
 	if is_foreign "$arch"; then
 		[[ -n $root ]] || die "ARCH=$arch requires ROOT for virtme-ng runs"
@@ -392,6 +430,8 @@ commands:
   normalize-arch <arch>
   preflight-root <root> [arch]
   preflight-vng <root> [arch]
+  qemu-arch <arch>
+  qemu-bin-path <arch>
   resolve-arch [root] [arch]
   root-arch <root>
   suse-arch <arch>
@@ -430,6 +470,14 @@ preflight-root)
 preflight-vng)
 	[[ $# -ge 0 && $# -le 2 ]] || die "usage: cross preflight-vng [root] [arch]"
 	preflight_vng "${1-}" "${2-}"
+	;;
+qemu-arch)
+	[[ $# -eq 1 ]] || die "usage: cross qemu-arch <arch>"
+	qemu_arch "$1"
+	;;
+qemu-bin-path)
+	[[ $# -eq 1 ]] || die "usage: cross qemu-bin-path <arch>"
+	qemu_bin_path "$1"
 	;;
 resolve-arch)
 	[[ $# -ge 0 && $# -le 2 ]] || die "usage: cross resolve-arch [root] [arch]"

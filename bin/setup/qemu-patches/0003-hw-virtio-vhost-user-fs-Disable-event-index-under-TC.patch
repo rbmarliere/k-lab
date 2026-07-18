@@ -1,0 +1,55 @@
+From f6ff4038787a278eaf85e70b0c041eb48448a205 Mon Sep 17 00:00:00 2001
+From: "Ricardo B. Marlière (SUSE)" <ricardo@marliere.net>
+Date: Fri, 17 Jul 2026 11:05:21 -0300
+Subject: [PATCH] hw/virtio/vhost-user-fs: Disable event index under TCG
+
+TCG coherency with backend writes relies on every completion passing
+through QEMU's guest notifier handler so the dirty log can be synced before
+the guest runs. VIRTIO_RING_F_EVENT_IDX lets the backend suppress those
+completion interrupts and have the guest poll the used ring instead, which
+bypasses the reconciliation and lets the guest execute stale translations.
+
+Withhold the feature from the guest under TCG. This is confined to
+emulation, where correctness outweighs the notification-suppression
+optimisation; KVM guests keep event index.
+---
+ hw/virtio/vhost-user-fs.c | 16 +++++++++++++++-
+ 1 file changed, 15 insertions(+), 1 deletion(-)
+
+diff --git a/hw/virtio/vhost-user-fs.c b/hw/virtio/vhost-user-fs.c
+index 209993918a37..e2a1c3d4377f 100644
+--- a/hw/virtio/vhost-user-fs.c
++++ b/hw/virtio/vhost-user-fs.c
+@@ -21,6 +21,7 @@
+ #include "hw/virtio/virtio-access.h"
+ #include "qemu/error-report.h"
+ #include "hw/virtio/vhost.h"
++#include "system/tcg.h"
+ #include "hw/virtio/vhost-user-fs.h"
+ #include "monitor/monitor.h"
+ #include "system/system.h"
+@@ -150,7 +151,20 @@ static uint64_t vuf_get_features(VirtIODevice *vdev,
+ {
+     VHostUserFS *fs = VHOST_USER_FS(vdev);
+ 
+-    return vhost_get_features(&fs->vhost_dev, user_feature_bits, features);
++    features = vhost_get_features(&fs->vhost_dev, user_feature_bits, features);
++
++    /*
++     * Under TCG we keep guest-visible completions flowing through QEMU so we
++     * can reconcile TCG translations with backend writes (see
++     * vhost_tcg_sync_dirty_code()). VIRTIO_RING_F_EVENT_IDX lets the backend
++     * suppress those completion interrupts (guest polls the used ring),
++     * bypassing that reconciliation. Disable it for TCG.
++     */
++    if (tcg_enabled()) {
++        virtio_clear_feature(&features, VIRTIO_RING_F_EVENT_IDX);
++    }
++
++    return features;
+ }
+ 
+ static void vuf_handle_output(VirtIODevice *vdev, VirtQueue *vq)
+-- 
+2.55.0
+

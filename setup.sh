@@ -59,9 +59,11 @@ Load the kt shell wrapper and completion with:
 
 Add that line to your shell rc file if you want it by default.
 
-Before using kt or virtme-ng, build the matching static busybox binary for the
-arch you want to boot, for example:
+Before using kt or virtme-ng, build the matching static busybox and QEMU
+binaries for the arch you want to boot, and the virtiofsd daemon, for example:
   $THIS_DIR/bin/setup/build-busybox x86_64
+  $THIS_DIR/bin/setup/build-qemu x86_64
+  $THIS_DIR/bin/setup/build-virtiofsd
 
-Run '$THIS_DIR/bin/setup/build-busybox --help' for details.
+Run any of them with --help for details.
 EOF

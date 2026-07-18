@@ -1,0 +1,55 @@
+#!/bin/bash -eu
+
+THIS_DIR=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")
+VIRTIOFSD_TAG=v1.14.0
+VIRTIOFSD_REMOTE=https://gitlab.com/virtio-fs/virtiofsd.git
+
+# shellcheck disable=SC1091
+source "$THIS_DIR/../env.sh"
+
+VIRTIOFSD_SRC_DIR=$VIRTIOFSD_DIR/src
+VIRTIOFSD_BIN=$VNG_DIR/virtme/guest/bin/virtiofsd
+
+die() {
+	echo "ERROR: $*" >&2
+	exit 1
+}
+
+usage() {
+	cat <<EOF
+usage: $(basename -- "$0")
+
+Build the Rust virtiofsd daemon from source for virtme-ng virtiofs support.
+EOF
+}
+
+ensure_source_checkout() {
+	if [[ -d $VIRTIOFSD_SRC_DIR/.git ]]; then
+		git -C "$VIRTIOFSD_SRC_DIR" fetch --depth 1 origin "$VIRTIOFSD_TAG"
+		git -C "$VIRTIOFSD_SRC_DIR" checkout -f FETCH_HEAD
+		return 0
+	fi
+
+	mkdir -p -- "$(dirname -- "$VIRTIOFSD_SRC_DIR")"
+	git clone --depth 1 --branch "$VIRTIOFSD_TAG" "$VIRTIOFSD_REMOTE" "$VIRTIOFSD_SRC_DIR"
+}
+
+case "${1-}" in
+-h | --help | help)
+	usage
+	exit 0
+	;;
+esac
+
+[[ -x $VIRTIOFSD_BIN ]] && exit 0
+
+command -v cargo >/dev/null 2>&1 || die "cargo not found; install rustup/cargo to build virtiofsd"
+
+ensure_source_checkout
+
+(
+	cd "$VIRTIOFSD_SRC_DIR"
+	cargo build --release
+)
+
+install -Dm755 -- "$VIRTIOFSD_SRC_DIR/target/release/virtiofsd" "$VIRTIOFSD_BIN"

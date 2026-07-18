@@ -38,8 +38,11 @@ Bootstrap:
 
 1. Edit `setup.conf`.
 2. Run `./setup.sh`.
-3. Build the matching static busybox for the arch you want to boot, for example
-   `./bin/setup/build-busybox x86_64`.
+3. Build the matching static busybox and QEMU for the arch you want to boot,
+   and the virtiofsd daemon, for example:
+   `./bin/setup/build-busybox x86_64`,
+   `./bin/setup/build-qemu x86_64`,
+   `./bin/setup/build-virtiofsd`.
 4. Source the wrapper:
 
    ```bash source /path/to/k-lab.sh ```
@@ -121,8 +124,15 @@ zypper install \
 	qemu-linux-user \
 	qemu-ppc \
 	qemu-s390x \
-	sudo
+	sudo \
+	meson \
+	ninja \
+	pkg-config \
+	glib2-devel
 ```
+
+`bin/setup/build-virtiofsd` also needs a Rust toolchain (`cargo`/`rustc`), for
+example via [rustup](https://rustup.rs/).
 
 If you build for a non-native `ARCH` on the host, the host also needs a usable
 cross toolchain. By default, k-lab derives `CROSS_COMPILE` from `ARCH`;
@@ -229,9 +239,10 @@ For foreign-arch roots:
 - host-side execution inside the rootfs still needs `binfmt_misc` plus QEMU
   user-mode support
 
-VM boots always use a matching static busybox build. Build it first, for
-example `./bin/setup/build-busybox x86_64` or
-`./bin/setup/build-busybox arm64`.
+VM boots always use a matching static busybox build and QEMU binary. Build
+them first, for example `./bin/setup/build-busybox x86_64 && ./bin/setup/build-qemu x86_64`
+or `./bin/setup/build-busybox arm64 && ./bin/setup/build-qemu arm64`. Also run
+`./bin/setup/build-virtiofsd` once (architecture-independent).
 
 `bin/rootfs/shell` is a convenience wrapper around the same mount and `chroot`
 path used by normal rootfs-backed runs. It needs `TMP_DIR` set to a scratch

@@ -1,0 +1,46 @@
+From d3faa0d35b6149ffe85b601956045e7f6c2e1cb1 Mon Sep 17 00:00:00 2001
+From: "Ricardo B. Marlière (SUSE)" <ricardo@marliere.net>
+Date: Fri, 17 Jul 2026 11:05:18 -0300
+Subject: [PATCH] hw/virtio: Reconcile TCG translations on vhost completions
+
+A vhost-user backend can write executable guest RAM behind TCG's back, so
+the guest must not execute those pages before TCG drops the stale
+translations. The dirty log records the written pages, but nothing syncs
+it on the hot path.
+
+Sync the completing device's log from the guest notifier handler, before
+raising the guest interrupt. Under TCG there is no KVM irqfd, so vhost-user
+completions are delivered through this handler, making it the natural point
+to reconcile TCG's view. The call is a no-op unless the device enabled
+logging for TCG coherency, so KVM and non-vhost-user devices are
+unaffected.
+---
+ hw/virtio/virtio.c | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/hw/virtio/virtio.c b/hw/virtio/virtio.c
+index f4d86a365530..2b0aa4d13e68 100644
+--- a/hw/virtio/virtio.c
++++ b/hw/virtio/virtio.c
+@@ -4002,6 +4002,18 @@ static void virtio_queue_guest_notifier_read(EventNotifier *n)
+ {
+     VirtQueue *vq = container_of(n, VirtQueue, guest_notifier);
+     if (event_notifier_test_and_clear(n)) {
++        /*
++         * Under TCG a vhost-user backend may have written guest RAM (including
++         * executable pages) before signaling this completion. Reconcile TCG's
++         * view before the guest runs. No-op unless the device is in code-sync
++         * mode. See vhost_tcg_sync_dirty_code().
++         */
++        VirtIODevice *vdev = vq->vdev;
++        VirtioDeviceClass *vdc = VIRTIO_DEVICE_GET_CLASS(vdev);
++
++        if (vdc->get_vhost) {
++            vhost_tcg_sync_dirty_code(vdc->get_vhost(vdev));
++        }
+         virtio_irq(vq);
+     }
+ }
+-- 
+2.55.0
+

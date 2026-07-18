@@ -37,6 +37,7 @@ resolved_arch=$("$BIN"/cross resolve-arch "$VNG_ROOT" "${ARCH-}")
 
 arch_args=(
 	--busybox "$("$BIN"/cross busybox-path "$resolved_arch")"
+	--qemu "$("$BIN"/cross qemu-bin-path "$resolved_arch")"
 )
 if "$BIN"/cross is-foreign "$resolved_arch"; then
 	cross_compile=$("$BIN"/cross cross-compile "$resolved_arch")
@@ -45,29 +46,6 @@ if "$BIN"/cross is-foreign "$resolved_arch"; then
 		arch_args+=(--cross-compile "$cross_compile")
 	fi
 fi
-
-# --force-9p is always on below (not just for foreign arch), and 9p does
-# not support some things a real filesystem does, most notably shared
-# writable mmap. This breaks whatever program happens to rely on it,
-# unpredictably (first seen: rpm's "ndb" database backend, e.g. zypper
-# failing with "cannot open Name index using ndb - Operation not
-# permitted" -- reproduces on native arch too, not just foreign). Rather
-# than special-case every affected program, overlay the whole root with a
-# tmpfs upper layer for the session: the kernel transparently copies any
-# file opened for writing onto tmpfs (which has full POSIX semantics), so
-# this class of problem disappears regardless of what triggers it or which
-# arch is booted. Copy the (possibly modified) upper layer back onto the
-# real root before exiting, so changes persist.
-#
-# VNG_ROOT is root-owned, so we cannot just write this file into it as the
-# invoking (possibly unprivileged) user. Get it into place with only
-# already-allowed sudo commands instead: touch a target inside VNG_ROOT,
-# then bind-mount the real, checked-in bin/vng/overlay script onto it.
-overlay_helper="$VNG_ROOT/overlay"
-"$BIN"/run --as-root -- touch "$overlay_helper"
-"$BIN"/run --as-root -- mount --bind "$BIN/vng/overlay" "$overlay_helper"
-post_args=(/overlay "${post_args[@]}")
-have_dashdash=1
 
 vng_port=${VNG_PORT:-$((22000 + RANDOM % 1001))}
 # Automated runs (start-vm) always have a per-run TMP_DIR, so key the helper
@@ -81,7 +59,7 @@ if [[ -n ${TMP_DIR-} ]]; then
 else
 	ssh_helper="ssh-$(basename -- "$VNG_ROOT")"
 fi
-trap '"$BIN"/run --as-root -- umount "$overlay_helper" 2>/dev/null || true; rm -f -- "$ssh_helper"' EXIT
+trap 'rm -f -- "$ssh_helper"' EXIT
 
 export PATH="$VNG_DIR:$VNG_DIR/virtme/guest/bin:$PATH"
 
@@ -111,7 +89,6 @@ set \
 	--ssh-tcp \
 	--ssh "$vng_port" \
 	--memory "${VNG_MEM:-8G}" \
-	--force-9p \
 	--disable-microvm \
 	"${arch_args[@]}" \
 	"${pre_args[@]}"
