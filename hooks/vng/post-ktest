@@ -1,4 +1,5 @@
-#!/bin/bash -eu
+#!/bin/bash -u
 
 "$BIN"/vng/stop-vm -f
-rm "$BUILD_DIR"/ssh-"$VNG_PORT"
+unlink "$BUILD_DIR"/ssh-"$VNG_PORT"
+unlink "$BUILD_DIR"/tmp-"$VNG_PORT"
