@@ -1,5 +1,10 @@
 #!/bin/bash -eu
 
+THIS_DIR=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")
+
+# shellcheck disable=SC1091
+source "$THIS_DIR/../env.sh"
+
 build_options=${BUILD_OPTIONS-}
 for arg in "$@"; do
 	case "$arg" in
@@ -18,9 +23,10 @@ cmd+=(-C "$BUILD_DIR" O="$OUTPUT_DIR")
 if [[ -n ${ARCH-} ]]; then
 	cmd+=("ARCH=$ARCH")
 fi
-if [[ ${BUILD_IN_ROOT:-0} != 1 ]] && [[ -n ${CROSS_COMPILE-} ]]; then
-	cmd+=("CROSS_COMPILE=$CROSS_COMPILE")
-fi
+# No CROSS_COMPILE: CHROOT's own native toolchain is used directly (the
+# chroot IS that architecture, transparently emulated via qemu-user when
+# foreign to the host). CC/HOSTCC/HOSTCFLAGS still forward through if a test
+# explicitly set them (e.g. to pick an alternate compiler present in CHROOT).
 if [[ -n ${CC-} ]]; then
 	cmd+=("CC=$CC")
 fi
@@ -31,18 +37,6 @@ if [[ -n ${HOSTCFLAGS-} ]]; then
 	cmd+=("HOSTCFLAGS=$HOSTCFLAGS")
 fi
 
-has_modules_install=0
-for arg in "$@"; do
-	if [[ $arg == modules_install ]]; then
-		has_modules_install=1
-		break
-	fi
-done
-
 cmd+=("$@")
 
-if ((has_modules_install)); then
-	exec "$BIN"/rootfs/run "${cmd[@]}"
-fi
-
-exec "$BIN"/rootfs/run --as-user "${cmd[@]}"
+exec "$BIN"/chroot/run --as-user "${cmd[@]}"

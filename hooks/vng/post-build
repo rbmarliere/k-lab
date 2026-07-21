@@ -1,7 +1,5 @@
 #!/bin/bash -eu
 
-[[ -n ${ROOT-} ]] && exit 0
-
 cd "$OUTPUT_DIR"
 [[ -f modules.order ]] || exit 0
 

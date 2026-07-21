@@ -116,47 +116,58 @@ require_vng() {
 	return 0
 }
 
-resolve_root() {
-	[[ -n ${ROOT-} ]] || env_error "ROOT is not set" || return 1
+resolve_root_disk() {
+	[[ -n ${ROOT_DISK-} ]] || env_error "ROOT_DISK is not set" || return 1
 
-	if ! ROOT=$(realpath -- "$ROOT" 2>/dev/null); then
-		env_error "unable to resolve ROOT: $ROOT"
+	if ! ROOT_DISK=$(realpath -- "$ROOT_DISK" 2>/dev/null); then
+		env_error "unable to resolve ROOT_DISK: $ROOT_DISK"
 		return 1
 	fi
 
-	export ROOT
+	export ROOT_DISK
 	return 0
 }
 
-# Every run gets its own private, writable, copy-on-write view of ROOT:
-#   ROOT_MERGED  = overlay(lowerdir=ROOT, upperdir=ROOTFS_UPPER) -- what
-#                  everything (chroot, vng --root, modules_install, ...)
-#                  actually reads and writes.
-#   ROOTFS_UPPER = per-run writable layer
-#   ROOTFS_WORK  = overlayfs scratch dir (required, never accessed directly)
-# This keeps ROOT itself read-only and shared, so concurrent runs against the
-# same ROOT never mount, chroot into, or write to the same path.
-rootfs_overlay_paths() {
+resolve_chroot() {
+	[[ -n ${CHROOT-} ]] || env_error "CHROOT is not set" || return 1
+
+	if ! CHROOT=$(realpath -- "$CHROOT" 2>/dev/null); then
+		env_error "unable to resolve CHROOT: $CHROOT"
+		return 1
+	fi
+	if [[ ! -d $CHROOT ]]; then
+		env_error "CHROOT is not a directory: $CHROOT"
+		return 1
+	fi
+
+	export CHROOT
+	return 0
+}
+
+# Every run gets its own private, writable, copy-on-write view of CHROOT:
+#   CHROOT_MERGED = overlay(lowerdir=CHROOT, upperdir=CHROOT_UPPER) -- what
+#                   the chrooted build actually reads and writes.
+#   CHROOT_UPPER  = per-run writable layer
+#   CHROOT_WORK   = overlayfs scratch dir (required, never accessed directly)
+# This keeps CHROOT itself read-only and shared, so concurrent runs against
+# the same CHROOT (e.g. a shared CHROOT_ARM64 in setup.conf) never mount,
+# chroot into, or write to the same path.
+chroot_overlay_paths() {
 	local resolved_tmp_dir
 
-	[[ -n ${TMP_DIR-} ]] || env_error "TMP_DIR is not set (required to isolate ROOT per run)" || return 1
+	[[ -n ${TMP_DIR-} ]] || env_error "TMP_DIR is not set (required to isolate CHROOT per run)" || return 1
 
 	# Canonicalize TMP_DIR (e.g. resolve the /linux/k-lab symlink) so
-	# ROOT_MERGED matches what mount(8) actually records in /proc/mounts.
-	# mount(8) always canonicalizes its target argument; if ROOT_MERGED here
-	# kept a symlinked prefix, every "is this already mounted?" /proc/mounts
-	# lookup below would silently never match, and mount-overlay would stack
-	# a fresh overlay (and rootfs/mount would stack fresh bind mounts) on
-	# every single call instead of detecting the existing one.
+	# CHROOT_MERGED matches what mount(8) actually records in /proc/mounts.
 	resolved_tmp_dir=$(realpath -m -- "$TMP_DIR") || {
 		env_error "unable to resolve TMP_DIR: $TMP_DIR"
 		return 1
 	}
 
-	ROOTFS_UPPER=$resolved_tmp_dir/rootfs/upper
-	ROOTFS_WORK=$resolved_tmp_dir/rootfs/work
-	ROOT_MERGED=$resolved_tmp_dir/rootfs/merged
+	CHROOT_UPPER=$resolved_tmp_dir/chroot/upper
+	CHROOT_WORK=$resolved_tmp_dir/chroot/work
+	CHROOT_MERGED=$resolved_tmp_dir/chroot/merged
 
-	export ROOTFS_UPPER ROOTFS_WORK ROOT_MERGED
+	export CHROOT_UPPER CHROOT_WORK CHROOT_MERGED
 	return 0
 }

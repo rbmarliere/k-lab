@@ -1,6 +1,6 @@
 #!/bin/bash -eu
 
-"$BIN"/cross preflight-vng "${ROOT-}" "$ARCH"
+"$BIN"/cross preflight-vng "${ROOT_DISK-}" "$ARCH"
 "$BIN"/vng/min-config "$TMP_DIR"/vng-min.config "$ARCH"
 "$BIN"/vng/stop-vm -f
 rm -f -- "$TMP_DIR"/console "$TMP_DIR"/vng.log

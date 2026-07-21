@@ -1,6 +1,0 @@
-#!/bin/bash -eu
-
-[[ -n ${ROOT_DISK-} ]] || exit 0
-[[ -d $ROOT_DISK ]] || exit 0
-
-"$BIN"/rootfs/mount

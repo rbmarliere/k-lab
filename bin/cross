@@ -36,7 +36,7 @@ normalize_arch() {
 	esac
 }
 
-normalize_root() {
+normalize_root_disk() {
 	case "${1-}" in
 	"" | 0)
 		printf '%s\n' ""
@@ -48,10 +48,9 @@ normalize_root() {
 }
 
 # Infer an arch from a disk image's filename, e.g. aarch64.img/arm64.img ->
-# arm64, s390x.img -> s390, ppc64le.img -> powerpc. ROOT_DISK is now a disk image
-# passed to virtme-ng's --root-disk, not a directory, so unlike the old
-# directory-rootfs ELF probe below, this is a naming convention, not a hard
-# filesystem inspection.
+# arm64, s390x.img -> s390, ppc64le.img -> powerpc. ROOT_DISK is a disk image
+# (not a directory), so unlike the old directory-rootfs ELF probe, this is a
+# naming convention, not a hard filesystem inspection.
 disk_arch() {
 	local path=$1
 	local name stem
@@ -66,6 +65,148 @@ disk_arch() {
 		;;
 	*)
 		return 1
+		;;
+	esac
+}
+
+# Basic sanity check that a directory looks like a usable chroot target
+# before an expensive chrooted build is attempted: must have a shell and a C
+# compiler somewhere in the usual (usrmerge or not) locations.
+preflight_chroot() {
+	local dir=$1 shell="" cc=""
+
+	[[ -n $dir ]] || die "missing CHROOT directory"
+	[[ -d $dir ]] || die "CHROOT is not a directory: $dir"
+
+	for shell in "$dir"/bin/sh "$dir"/usr/bin/sh; do
+		[[ -x $shell ]] && break
+		shell=""
+	done
+	[[ -n $shell ]] || die "CHROOT has no usable shell (checked bin/sh, usr/bin/sh): $dir"
+
+	for cc in "$dir"/usr/bin/gcc "$dir"/usr/bin/cc "$dir"/bin/gcc "$dir"/bin/cc; do
+		[[ -x $cc ]] && break
+		cc=""
+	done
+	[[ -n $cc ]] || die "CHROOT has no usable C compiler (checked usr/bin/{gcc,cc}, bin/{gcc,cc}): $dir"
+}
+
+# Find a real ELF userspace binary inside CHROOT to inspect (CHROOT has no
+# naming convention to rely on, unlike ROOT_DISK's filename), resolving
+# symlinks by hand and refusing anything that escapes CHROOT.
+probe_chroot_elf() {
+	local dir=$1
+	local dir_display=$1
+	local rel path real
+
+	resolve_path_under_dir() {
+		local dir=$1
+		local path=$2
+		local target subdir
+		local depth=0
+
+		while [[ -L $path ]]; do
+			((depth++ < 40)) || die "too many symlinks while probing CHROOT=$dir"
+
+			target=$(readlink -- "$path") || die "failed to read symlink: $path"
+			if [[ $target == /* ]]; then
+				path=$dir$target
+				continue
+			fi
+
+			subdir=$(dirname -- "$path")
+			path=$(realpath -m -- "$subdir/$target")
+			case "$path" in
+			"$dir" | "$dir"/*)
+				;;
+			*)
+				die "symlink escapes CHROOT=$dir: $path"
+				;;
+			esac
+		done
+
+		printf '%s\n' "$path"
+	}
+
+	[[ -n $dir ]] || return 1
+	[[ -d $dir ]] || die "CHROOT is not a directory: $dir"
+	dir=$(realpath -e -- "$dir") || die "failed to resolve CHROOT=$dir_display"
+
+	for rel in /bin/sh /usr/bin/env /bin/bash /usr/bin/bash /lib/systemd/systemd /sbin/init; do
+		path=$dir$rel
+		[[ -e $path ]] || continue
+
+		if ! real=$(resolve_path_under_dir "$dir" "$path"); then
+			return 1
+		fi
+
+		[[ -f $real ]] || continue
+		if readelf -h -- "$real" >/dev/null 2>&1; then
+			printf '%s\n' "$real"
+			return 0
+		fi
+	done
+
+	die "unable to find an ELF userspace binary under CHROOT=$dir"
+}
+
+# Inspect a real ELF binary inside CHROOT to determine its architecture: no
+# naming convention to rely on (unlike ROOT_DISK's filename), so this is a
+# hard filesystem inspection instead.
+chroot_arch() {
+	local dir=$1
+	local elf machine data
+
+	[[ -n $dir ]] || return 1
+	elf=$(probe_chroot_elf "$dir")
+
+	machine=$(
+		readelf -h -- "$elf" | awk -F: '
+			$1 ~ /Machine/ {
+				gsub(/^[[:space:]]+/, "", $2)
+				print $2
+				exit
+			}
+		'
+	)
+	data=$(
+		readelf -h -- "$elf" | awk -F: '
+			$1 ~ /Data/ {
+				gsub(/^[[:space:]]+/, "", $2)
+				print $2
+				exit
+			}
+		'
+	)
+
+	case "$machine" in
+	"Advanced Micro Devices X86-64")
+		printf '%s\n' x86_64
+		;;
+	AArch64)
+		printf '%s\n' arm64
+		;;
+	ARM)
+		printf '%s\n' arm
+		;;
+	PowerPC64)
+		case "$data" in
+		*little\ endian*)
+			printf '%s\n' powerpc
+			;;
+		*)
+			die "unsupported PowerPC CHROOT endianness: $dir"
+			;;
+		esac
+		;;
+	"IBM S/390")
+		printf '%s\n' s390
+		;;
+	RISC-V)
+		printf '%s\n' riscv
+		;;
+	*)
+		die "unsupported CHROOT architecture '$machine': $dir"
 		;;
 	esac
 }
@@ -154,6 +295,11 @@ cross_compile() {
 	esac
 
 	key=$(cross_compile_var "$arch")
+	if [[ -n ${!key-} ]]; then
+		printf '%s\n' "${!key}"
+		return 0
+	fi
+
 	value=$(read_setup_var "$key" || true)
 	if [[ -n $value ]]; then
 		printf '%s\n' "$value"
@@ -161,6 +307,47 @@ cross_compile() {
 	fi
 
 	cross_compile_default "$arch"
+}
+
+chroot_var() {
+	case "$1" in
+	x86_64)
+		printf '%s\n' CHROOT_X86_64
+		;;
+	arm64)
+		printf '%s\n' CHROOT_ARM64
+		;;
+	arm)
+		printf '%s\n' CHROOT_ARM
+		;;
+	powerpc)
+		printf '%s\n' CHROOT_POWERPC
+		;;
+	s390)
+		printf '%s\n' CHROOT_S390
+		;;
+	riscv)
+		printf '%s\n' CHROOT_RISCV
+		;;
+	*)
+		die "unsupported chroot architecture: $1"
+		;;
+	esac
+}
+
+# Unlike cross_compile, there is no sensible built-in default: prints empty
+# if not configured in setup.conf.
+chroot_dir() {
+	local arch key
+
+	arch=$(normalize_arch "$1")
+	key=$(chroot_var "$arch")
+	if [[ -n ${!key-} ]]; then
+		printf '%s\n' "${!key}"
+		return 0
+	fi
+
+	read_setup_var "$key" || true
 }
 
 vng_arch() {
@@ -222,132 +409,27 @@ busybox_path() {
 	printf '%s\n' "$TOOLS_DIR/busybox/$arch/bin/busybox"
 }
 
-probe_root_elf() {
-	local root=$1
-	local root_display=$1
-	local rel path real
-
-	resolve_path_under_root() {
-		local root=$1
-		local path=$2
-		local target dir
-		local depth=0
-
-		while [[ -L $path ]]; do
-			((depth++ < 40)) || die "too many symlinks while probing ROOT_DISK=$root"
-
-			target=$(readlink -- "$path") || die "failed to read symlink: $path"
-			if [[ $target == /* ]]; then
-				path=$root$target
-				continue
-			fi
-
-			dir=$(dirname -- "$path")
-			path=$(realpath -m -- "$dir/$target")
-			case "$path" in
-			"$root" | "$root"/*)
-				;;
-			*)
-				die "symlink escapes ROOT_DISK=$root: $path"
-				;;
-			esac
-		done
-
-		printf '%s\n' "$path"
-	}
-
-	[[ -n $root ]] || return 1
-	[[ -d $root ]] || die "ROOT_DISK is not a directory: $root"
-	root=$(realpath -e -- "$root") || die "failed to resolve ROOT_DISK=$root_display"
-
-	for rel in /bin/sh /usr/bin/env /bin/bash /usr/bin/bash /lib/systemd/systemd /sbin/init; do
-		path=$root$rel
-		[[ -e $path ]] || continue
-
-		if ! real=$(resolve_path_under_root "$root" "$path"); then
-			return 1
-		fi
-
-		[[ -f $real ]] || continue
-		if readelf -h -- "$real" >/dev/null 2>&1; then
-			printf '%s\n' "$real"
-			return 0
-		fi
-	done
-
-	die "unable to find an ELF userspace binary under ROOT_DISK=$root"
-}
-
-root_arch() {
-	local root=$1
-	local elf machine data
-
-	root=$(normalize_root "$root")
-	[[ -n $root ]] || return 0
-	elf=$(probe_root_elf "$root")
-
-	machine=$(
-		readelf -h -- "$elf" | awk -F: '
-			$1 ~ /Machine/ {
-				gsub(/^[[:space:]]+/, "", $2)
-				print $2
-				exit
-			}
-		'
-	)
-	data=$(
-		readelf -h -- "$elf" | awk -F: '
-			$1 ~ /Data/ {
-				gsub(/^[[:space:]]+/, "", $2)
-				print $2
-				exit
-			}
-		'
-	)
-
-	case "$machine" in
-	"Advanced Micro Devices X86-64")
-		printf '%s\n' x86_64
-		;;
-	AArch64)
-		printf '%s\n' arm64
-		;;
-	ARM)
-		printf '%s\n' arm
-		;;
-	PowerPC64)
-		case "$data" in
-		*little\ endian*)
-			printf '%s\n' powerpc
-			;;
-		*)
-			die "unsupported PowerPC rootfs endianness under ROOT_DISK=$root"
-			;;
-		esac
-		;;
-	"IBM S/390")
-		printf '%s\n' s390
-		;;
-	RISC-V)
-		printf '%s\n' riscv
-		;;
-	*)
-		die "unsupported ROOT_DISK architecture '$machine' under ROOT_DISK=$root"
-		;;
-	esac
-}
-
 resolve_arch() {
-	local root=${1-}
+	local root_disk=${1-}
 	local arch=${2-}
+	local chroot_dir=${3-}
 
 	if [[ -n $arch ]]; then
 		normalize_arch "$arch"
 		return 0
 	fi
 
-	root=$(normalize_root "$root")
-	if [[ -n $root ]] && disk_arch "$root" 2>/dev/null; then
+	root_disk=$(normalize_root_disk "$root_disk")
+	if [[ -n $root_disk ]] && disk_arch "$root_disk" 2>/dev/null; then
+		return 0
+	fi
+
+	# Fall back to inspecting a real ELF binary under CHROOT: only useful
+	# for an explicit "-D CHROOT:=/path" override, since it must already be
+	# known by the time ARCH itself is being resolved (setup.conf's
+	# CHROOT_<ARCH> auto-selection depends on ARCH, so it cannot feed back
+	# into it).
+	if [[ -n $chroot_dir ]] && chroot_arch "$chroot_dir" 2>/dev/null; then
 		return 0
 	fi
 
@@ -361,43 +443,18 @@ is_foreign() {
 	[[ $arch != x86_64 ]]
 }
 
-preflight_root() {
-	local root=${1-}
-	local arch=${2-}
-	local detected
-	local root_uid
-
-	root=$(normalize_root "$root")
-	[[ -n $root ]] || return 0
-	[[ -d $root ]] || die "ROOT_DISK is not a directory: $root"
-
-	root_uid=$(stat -c %u -- "$root") || die "failed to stat ROOT_DISK: $root"
-	[[ $root_uid == 0 ]] || die "ROOT_DISK must be owned by root (uid 0): $root"
-
-	detected=$(root_arch "$root")
-	if [[ -n $arch ]]; then
-		arch=$(normalize_arch "$arch")
-		if [[ $arch != "$detected" ]]; then
-			die "ARCH=$arch does not match ROOT_DISK=$root ($detected)"
-		fi
-	else
-		arch=$detected
-	fi
-
-}
-
-# Fast fail-fast checks before a build/boot even starts. ROOT_DISK (a disk image)
-# may legitimately be unset for build-only tests that never boot a VM; in
-# that case bin/vng/cmd itself is the real enforcement point (it always
-# requires a valid disk image, whenever it is actually invoked).
+# Fast fail-fast checks before a build/boot even starts. ROOT_DISK (a disk
+# image) may legitimately be unset for build-only tests that never boot a
+# VM; in that case bin/vng/cmd itself is the real enforcement point (it
+# always requires a valid disk image, whenever it is actually invoked).
 preflight_vng() {
-	local root=${1-}
+	local root_disk=${1-}
 	local arch=${2-}
 	local busybox
 
-	root=$(normalize_root "$root")
-	if [[ -n $root ]]; then
-		[[ -f $root ]] || die "ROOT_DISK is not a regular file (expected a disk image): $root"
+	root_disk=$(normalize_root_disk "$root_disk")
+	if [[ -n $root_disk ]]; then
+		[[ -f $root_disk ]] || die "ROOT_DISK is not a regular file (expected a disk image): $root_disk"
 	fi
 
 	arch=$(normalize_arch "$arch")
@@ -412,14 +469,15 @@ usage: cross <command> [args]
 commands:
   build-target <arch>
   busybox-path <arch>
+  chroot-arch <dir>
+  chroot-dir <arch>
   cross-compile <arch>
   disk-arch <path>
   is-foreign <arch>
   normalize-arch <arch>
-  preflight-root <root> [arch]
-  preflight-vng [root] [arch]
-  resolve-arch [root] [arch]
-  root-arch <root>
+  preflight-chroot <dir>
+  preflight-vng [root_disk] [arch]
+  resolve-arch [root_disk] [arch] [chroot_dir]
   suse-arch <arch>
   vng-arch <arch>
 EOF
@@ -437,6 +495,14 @@ busybox-path)
 	[[ $# -eq 1 ]] || die "usage: cross busybox-path <arch>"
 	busybox_path "$1"
 	;;
+chroot-arch)
+	[[ $# -eq 1 ]] || die "usage: cross chroot-arch <dir>"
+	chroot_arch "$1"
+	;;
+chroot-dir)
+	[[ $# -eq 1 ]] || die "usage: cross chroot-dir <arch>"
+	chroot_dir "$1"
+	;;
 cross-compile)
 	[[ $# -eq 1 ]] || die "usage: cross cross-compile <arch>"
 	cross_compile "$1"
@@ -453,21 +519,17 @@ normalize-arch)
 	[[ $# -eq 1 ]] || die "usage: cross normalize-arch <arch>"
 	normalize_arch "$1"
 	;;
-preflight-root)
-	[[ $# -ge 1 && $# -le 2 ]] || die "usage: cross preflight-root <root> [arch]"
-	preflight_root "${1-}" "${2-}"
+preflight-chroot)
+	[[ $# -eq 1 ]] || die "usage: cross preflight-chroot <dir>"
+	preflight_chroot "$1"
 	;;
 preflight-vng)
-	[[ $# -ge 0 && $# -le 2 ]] || die "usage: cross preflight-vng [root] [arch]"
+	[[ $# -ge 0 && $# -le 2 ]] || die "usage: cross preflight-vng [root_disk] [arch]"
 	preflight_vng "${1-}" "${2-}"
 	;;
 resolve-arch)
-	[[ $# -ge 0 && $# -le 2 ]] || die "usage: cross resolve-arch [root] [arch]"
-	resolve_arch "${1-}" "${2-}"
-	;;
-root-arch)
-	[[ $# -eq 1 ]] || die "usage: cross root-arch <root>"
-	root_arch "$1"
+	[[ $# -ge 0 && $# -le 3 ]] || die "usage: cross resolve-arch [root_disk] [arch] [chroot_dir]"
+	resolve_arch "${1-}" "${2-}" "${3-}"
 	;;
 suse-arch)
 	[[ $# -eq 1 ]] || die "usage: cross suse-arch <arch>"

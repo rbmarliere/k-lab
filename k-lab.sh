@@ -128,32 +128,48 @@ _kt_dry_run_value() {
 	sed -n "s/^${key} = //p" | head -n 1
 }
 
-_kt_normalize_root_value() {
-	local root=${1-}
+_kt_normalize_root_disk_value() {
+	local root_disk=${1-}
 
-	case "$root" in
+	case "$root_disk" in
 	"" | 0)
 		printf '%s\n' ""
 		;;
 	*)
-		printf '%s\n' "$root"
+		printf '%s\n' "$root_disk"
 		;;
 	esac
 }
 
-_kt_preflight_root() {
-	local root=$1
+_kt_preflight_root_disk() {
+	local root_disk=$1
 
-	[[ -n $root ]] || return 0
+	[[ -n $root_disk ]] || return 0
 
-	if [[ ! -f $root ]]; then
-		echo "ERROR: ROOT_DISK must be a disk image file (passed to virtme-ng's --root-disk): $root" >&2
+	if [[ ! -f $root_disk ]]; then
+		echo "ERROR: ROOT_DISK must be a disk image file (passed to virtme-ng's --root-disk): $root_disk" >&2
 		return 1
 	fi
-	if [[ ! -r $root ]]; then
-		echo "ERROR: ROOT_DISK must be readable by $(id -un): $root" >&2
+	if [[ ! -r $root_disk ]]; then
+		echo "ERROR: ROOT_DISK must be readable by $(id -un): $root_disk" >&2
 		return 1
 	fi
+}
+
+# Fail fast (before any expensive build) if CHROOT_BUILD=1 but CHROOT does
+# not resolve to a usable chroot target.
+_kt_preflight_chroot() {
+	local chroot_build=$1
+	local chroot_dir=$2
+
+	[[ $chroot_build == 1 ]] || return 0
+
+	if [[ -z $chroot_dir ]]; then
+		echo "ERROR: CHROOT_BUILD=1 requires CHROOT to be set to a directory" >&2
+		return 1
+	fi
+
+	"$BIN"/cross preflight-chroot "$chroot_dir"
 }
 
 _kt_confirm() {
@@ -225,12 +241,12 @@ _kt_kargs_override() {
 _kt_compute_klab_id() {
 	local file_path=$1
 	shift
-	local root arch hash sub name
+	local root_disk arch hash sub name
 
-	root=$(_kt_kargs_override ROOT_DISK "$@")
+	root_disk=$(_kt_kargs_override ROOT_DISK "$@")
 	arch=$(_kt_kargs_override ARCH "$@")
 
-	hash=$(printf '%s' "$file_path|$root|$arch" | sha256sum | cut -c1-8)
+	hash=$(printf '%s' "$file_path|$root_disk|$arch" | sha256sum | cut -c1-8)
 
 	case $file_path in
 	"$THIS_DIR"/tests/*) sub=${file_path#"$THIS_DIR"/tests/} ;;
@@ -363,19 +379,28 @@ kt() {
 		fi
 	done < <(printf '%s\n' "$dry_run_output" | _kt_vng_ports_from_dry_run)
 
-	local root arch
+	local root_disk arch chroot_build chroot_dir
 	local summary_parts=()
-	root=$(_kt_normalize_root_value "$(printf '%s\n' "$dry_run_output" | _kt_dry_run_value ROOT_DISK)")
+	root_disk=$(_kt_normalize_root_disk_value "$(printf '%s\n' "$dry_run_output" | _kt_dry_run_value ROOT_DISK)")
 	arch=$(printf '%s\n' "$dry_run_output" | _kt_dry_run_value ARCH)
-	if [[ -n $root ]]; then
-		_kt_preflight_root "$root" || return 1
+	if [[ -n $root_disk ]]; then
+		_kt_preflight_root_disk "$root_disk" || return 1
 	fi
 
-	if [[ -n $root ]]; then
-		summary_parts+=("ROOT_DISK=$root")
+	chroot_build=$(printf '%s\n' "$dry_run_output" | _kt_dry_run_value CHROOT_BUILD)
+	chroot_dir=$(printf '%s\n' "$dry_run_output" | _kt_dry_run_value CHROOT)
+	if [[ ${chroot_build:-0} == 1 ]]; then
+		_kt_preflight_chroot "$chroot_build" "$chroot_dir" || return 1
+	fi
+
+	if [[ -n $root_disk ]]; then
+		summary_parts+=("ROOT_DISK=$root_disk")
 		if [[ -n $arch ]]; then
 			summary_parts+=("ARCH=$arch")
 		fi
+	fi
+	if [[ ${chroot_build:-0} == 1 ]]; then
+		summary_parts+=("CHROOT_BUILD=1" "CHROOT=$chroot_dir")
 	fi
 	if [[ ${#summary_parts[@]} -gt 0 ]]; then
 		local IFS=', '
