@@ -17,10 +17,15 @@ is_sudo_failure() {
 }
 
 run_as_root=
+preserve_env=
 while [[ $# -gt 0 ]]; do
 	case "$1" in
 	--as-root)
 		run_as_root=1
+		shift
+		;;
+	--preserve-env=*)
+		preserve_env=${1#--preserve-env=}
 		shift
 		;;
 	--)
@@ -43,9 +48,14 @@ if [[ -n $run_as_root ]]; then
 		exec "$@"
 	fi
 
+	sudo_args=(-n)
+	if [[ -n $preserve_env ]]; then
+		sudo_args+=("--preserve-env=$preserve_env")
+	fi
+
 	stderr_file=$(mktemp)
 	rc=0
-	sudo -n -- "$@" 2> >(tee "$stderr_file" >&2) || rc=$?
+	sudo "${sudo_args[@]}" -- "$@" 2> >(tee "$stderr_file" >&2) || rc=$?
 	if [[ $rc -ne 0 ]]; then
 		if is_sudo_failure "$stderr_file"; then
 			echo "ERROR: privileged host command failed: $1" >&2

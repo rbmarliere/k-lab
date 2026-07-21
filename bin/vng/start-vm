@@ -1,65 +1,16 @@
 #!/bin/bash -eu
 
-has_root=0
-for arg in "$@"; do
-	if [[ $arg == "--root" ]]; then
-		has_root=1
-		break
-	fi
-done
-
-if [[ -n ${ROOT-} ]]; then
-	set -- \
-		--user root \
-		--root "$ROOT" \
-		--rw \
-		"$@"
-	has_root=1
-fi
+root_disk=$(realpath "$ROOT_DISK")
 
 set -- \
-	--verbose \
 	--run "$OUTPUT_DIR" \
-	--network user \
-	--memory "${VNG_MEM:-1G}" \
 	--rwdir "$BUILD_DIR=$BUILD_DIR" \
 	--rwdir "$OUTPUT_DIR=$OUTPUT_DIR" \
-	--force-9p \
-	--disable-microvm \
-	--no-virtme-ng-init \
-	--ssh-tcp \
-	--ssh "$VNG_PORT" \
 	"$@"
 
-rootfs=()
-arch_args=()
-resolved_arch=$("$BIN"/cross resolve-arch "${ROOT-}" "${ARCH-}")
-if [[ $has_root -eq 1 && $(id -u) -ne 0 ]]; then
-	rootfs=(
-		unshare
-		--map-root-user
-		--map-auto
-		--mount
-		--
-	)
-fi
-
-"$BIN"/cross preflight-vng "${ROOT-}" "$resolved_arch"
-arch_args=(
-	--busybox "$("$BIN"/cross busybox-path "$resolved_arch")"
-)
-if "$BIN"/cross is-foreign "$resolved_arch"; then
-	arch_args=(
-		--arch "$("$BIN"/cross vng-arch "$resolved_arch")"
-		"${arch_args[@]}"
-	)
-fi
-
-echo "PATH=\"$VNG_DIR:$VNG_DIR/virtme/guest/bin:\$PATH\" ${rootfs[*]} vng ${arch_args[*]} $*" >"$TMP_DIR"/vng.cmd
-echo "PATH=\"$VNG_DIR:$VNG_DIR/virtme/guest/bin:\$PATH\" vng --ssh-tcp --ssh-client $VNG_PORT \"\$@\"" >"$TMP_DIR"/vng.ssh
-chmod +x "$TMP_DIR"/vng.ssh
+echo "$BIN/vng/cmd $root_disk $* -- sleep infinity" >"$TMP_DIR"/vng.cmd
 
 "$BIN"/vng/start-console
 
-setsid "${rootfs[@]}" "$BIN"/vng/cmd "${arch_args[@]}" "$@" -- sleep infinity </dev/null &>"$TMP_DIR"/vng.log &
+setsid "$BIN"/vng/cmd "$root_disk" "$@" -- sleep infinity </dev/null &>"$TMP_DIR"/vng.log &
 echo $! >"$TMP_DIR"/vng.pid

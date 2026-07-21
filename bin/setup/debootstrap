@@ -149,22 +149,6 @@ nameserver 8.8.8.8
 EOF
 }
 
-fix_ownership() {
-	[[ -d $ROOT ]] || return 0
-	local owner=${SUDO_USER:-$USER}
-	chown -R -- "$owner:$owner" "$ROOT"
-}
-
-on_exit() {
-	local status=$?
-	if ! fix_ownership; then
-		echo "WARN: failed to fix ownership: $ROOT" >&2
-	fi
-	# remove setuid from /bin/mount and others, so vng boots with unshare
-	find "$ROOT" -xdev -perm /6000 -exec chmod -s {} \;
-	return "$status"
-}
-
 run_post_install() {
 	install_guest_packages
 	run_extra_command
@@ -215,8 +199,6 @@ HOST_ARCH=$(normalize_arch "$(uname -m)")
 ARCH=${ARCH:-$HOST_ARCH}
 
 [[ -n $ROOT ]] || die "no target path specified"
-
-trap on_exit EXIT
 
 ensure_target_root
 run_debootstrap "$(debootstrap_arch "$ARCH")"
