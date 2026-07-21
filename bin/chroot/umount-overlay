@@ -5,17 +5,17 @@ THIS_DIR=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")
 # shellcheck disable=SC1091
 source "$THIS_DIR/../env.sh"
 
-[[ -n ${ROOT-} ]] || exit 0
-resolve_root || exit 1
-rootfs_overlay_paths || exit 1
+[[ -n ${CHROOT-} ]] || exit 0
+resolve_chroot || exit 1
+chroot_overlay_paths || exit 1
 
-if ! grep -q " $ROOT_MERGED " /proc/mounts 2>/dev/null; then
+if ! grep -q " $CHROOT_MERGED " /proc/mounts 2>/dev/null; then
 	exit 0
 fi
 
 # Best-effort: clear any leftover mounts under the merged view first (proc,
 # dev, sys, resolv.conf, OUTPUT_DIR, BUILD_DIR) so the overlay itself is not
 # busy. Normally these are already gone by the time this runs.
-"$BIN"/rootfs/umount || true
+"$BIN"/chroot/umount || true
 
-"$BIN"/run --as-root umount "$ROOT_MERGED"
+"$BIN"/run --as-root umount "$CHROOT_MERGED"

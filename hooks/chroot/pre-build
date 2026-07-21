@@ -1,0 +1,8 @@
+#!/bin/bash -eu
+
+[[ ${CHROOT_BUILD:-0} == 1 ]] || exit 0
+[[ -n ${CHROOT-} ]] || exit 0
+
+# Mount the per-run overlay + bind mounts now, before any bin/chroot/make
+# invocation in the BUILD phase.
+"$BIN"/chroot/mount

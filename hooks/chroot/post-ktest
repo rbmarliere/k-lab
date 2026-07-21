@@ -1,0 +1,13 @@
+#!/bin/bash -eu
+
+[[ ${CHROOT_BUILD:-0} == 1 ]] || exit 0
+[[ -n ${CHROOT-} ]] || exit 0
+
+# Safety net: ktest.pl skips POST_BUILD_CHAIN when the build fails before
+# reaching the actual build phase (e.g. a failed oldconfig), so
+# hooks/chroot/post-build's teardown never runs in that case. POST_KTEST
+# still runs on any outcome, and bin/chroot/umount(-overlay) are idempotent
+# (no-op if hooks/chroot/post-build already cleaned up), so this is safe to
+# always run here too.
+"$BIN"/chroot/umount || echo "WARN: failed to unmount CHROOT bind mounts" >&2
+"$BIN"/chroot/umount-overlay || echo "WARN: failed to unmount CHROOT overlay" >&2

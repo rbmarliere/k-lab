@@ -1,5 +1,17 @@
 #!/bin/bash -eu
 
+# CHROOT_BUILD=1 builds inside CHROOT (a directory produced by e.g.
+# bin/setup/debootstrap or bin/setup/suse-bootstrap) using ITS OWN native
+# toolchain, via a real chroot; foreign arches are transparently emulated by
+# the host's qemu-user/binfmt_misc registration. See bin/chroot/*.
+if [[ ${CHROOT_BUILD:-0} == 1 ]]; then
+	[[ -n ${CHROOT-} && -d $CHROOT ]] || {
+		echo "ERROR: CHROOT_BUILD=1 requires CHROOT to be a directory: ${CHROOT-}" >&2
+		exit 1
+	}
+	exec "$BIN"/chroot/make "$@"
+fi
+
 build_options=${BUILD_OPTIONS-}
 for arg in "$@"; do
 	case "$arg" in
@@ -29,10 +41,6 @@ if [[ -n ${HOSTCC-} ]]; then
 fi
 if [[ -n ${HOSTCFLAGS-} ]]; then
 	make_cmd+=("HOSTCFLAGS=$HOSTCFLAGS")
-fi
-
-if [[ ${BUILD_IN_ROOT:-0} == 1 ]] && [[ -n ${ROOT-} ]]; then
-	exec "$BIN"/rootfs/make "$@"
 fi
 
 exec "${make_cmd[@]}" "$@"
