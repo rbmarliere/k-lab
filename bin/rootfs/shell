@@ -11,6 +11,7 @@ THIS_DIR=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")
 source "$THIS_DIR/../env.sh"
 
 resolve_root || exit 1
+rootfs_overlay_paths || exit 1
 
 mounted=
 cleanup() {
@@ -19,6 +20,12 @@ cleanup() {
 	if [[ -n $mounted ]]; then
 		if ! "$BIN"/rootfs/umount; then
 			echo "ERROR: failed to unmount rootfs at ROOT=$ROOT" >&2
+			if [[ $rc -eq 0 ]]; then
+				rc=1
+			fi
+		fi
+		if ! "$BIN"/rootfs/umount-overlay; then
+			echo "ERROR: failed to unmount rootfs overlay at ROOT=$ROOT" >&2
 			if [[ $rc -eq 0 ]]; then
 				rc=1
 			fi

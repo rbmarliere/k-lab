@@ -18,14 +18,20 @@ cleanup() {
 trap cleanup EXIT
 
 resolve_root || exit 1
+rootfs_overlay_paths || exit 1
 
 if [[ ! -d $ROOT ]]; then
 	echo "ERROR: $ROOT directory does not exist, exiting..."
 	exit 1
 fi
 
+# Every run gets its own private overlay over ROOT (see rootfs_overlay_paths
+# in bin/env.sh); everything below mounts into that per-run merged view, not
+# into ROOT itself, so concurrent runs against the same ROOT never collide.
+"$BIN"/rootfs/mount-overlay
+
 ensure_resolv_conf_target() {
-	local target=$ROOT/etc/resolv.conf
+	local target=$ROOT_MERGED/etc/resolv.conf
 
 	if [[ -e $target ]]; then
 		return 0
@@ -37,34 +43,43 @@ ensure_resolv_conf_target() {
 	}
 }
 
-# Refuse to proceed if this rootfs is already mounted.
+# Idempotent: if this run's full mount (proc plus the rest below) is already
+# in place, there is nothing to do. This matters because BUILD_IN_ROOT flows
+# call this from both hooks/rootfs/pre-ktest and hooks/rootfs/pre-test.
+if grep -q " $ROOT_MERGED/proc " /proc/mounts; then
+	exit 0
+fi
+
+# Refuse to proceed if this run's merged rootfs already has some (but not
+# all, per the check above) mounts under it -- e.g. a stale mount left
+# behind by a crashed earlier invocation reusing the same TMP_DIR.
 mounted_under_root=$(
-	grep " $ROOT/" /proc/mounts | awk '{print $2}' | sort -r || true
+	grep " $ROOT_MERGED/" /proc/mounts | awk '{print $2}' | sort -r || true
 )
 if [[ -n $mounted_under_root ]]; then
-	echo "ERROR: refusing to mount on top of existing mounts under $ROOT" >&2
+	echo "ERROR: refusing to mount on top of existing mounts under $ROOT_MERGED" >&2
 	echo "ERROR: $mounted_under_root" >&2
 	exit 1
 fi
 
 ensure_resolv_conf_target
 
-"$BIN"/run --as-root mount -t proc proc "$ROOT"/proc
+"$BIN"/run --as-root mount -t proc proc "$ROOT_MERGED"/proc
 cleanup_needed=1
-"$BIN"/run --as-root mount --rbind /dev "$ROOT"/dev
-"$BIN"/run --as-root mount --make-rslave "$ROOT"/dev
-"$BIN"/run --as-root mount --rbind /sys "$ROOT"/sys
-"$BIN"/run --as-root mount --make-rslave "$ROOT"/sys
+"$BIN"/run --as-root mount --rbind /dev "$ROOT_MERGED"/dev
+"$BIN"/run --as-root mount --make-rslave "$ROOT_MERGED"/dev
+"$BIN"/run --as-root mount --rbind /sys "$ROOT_MERGED"/sys
+"$BIN"/run --as-root mount --make-rslave "$ROOT_MERGED"/sys
 
-"$BIN"/run --as-root mount --bind /etc/resolv.conf "$ROOT"/etc/resolv.conf
-"$BIN"/run --as-root mount -o remount,bind,ro /etc/resolv.conf "$ROOT"/etc/resolv.conf
+"$BIN"/run --as-root mount --bind /etc/resolv.conf "$ROOT_MERGED"/etc/resolv.conf
+"$BIN"/run --as-root mount -o remount,bind,ro /etc/resolv.conf "$ROOT_MERGED"/etc/resolv.conf
 
 if [[ -n ${OUTPUT_DIR-} ]]; then
-	"$BIN"/run --as-root mount --mkdir --bind "$OUTPUT_DIR" "$ROOT$OUTPUT_DIR"
+	"$BIN"/run --as-root mount --mkdir --bind "$OUTPUT_DIR" "$ROOT_MERGED$OUTPUT_DIR"
 fi
 
 if [[ -n ${BUILD_DIR-} ]]; then
-	"$BIN"/run --as-root mount --mkdir --bind "$BUILD_DIR" "$ROOT$BUILD_DIR"
+	"$BIN"/run --as-root mount --mkdir --bind "$BUILD_DIR" "$ROOT_MERGED$BUILD_DIR"
 fi
 
 cleanup_needed=

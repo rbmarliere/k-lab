@@ -127,3 +127,36 @@ resolve_root() {
 	export ROOT
 	return 0
 }
+
+# Every run gets its own private, writable, copy-on-write view of ROOT:
+#   ROOT_MERGED  = overlay(lowerdir=ROOT, upperdir=ROOTFS_UPPER) -- what
+#                  everything (chroot, vng --root, modules_install, ...)
+#                  actually reads and writes.
+#   ROOTFS_UPPER = per-run writable layer
+#   ROOTFS_WORK  = overlayfs scratch dir (required, never accessed directly)
+# This keeps ROOT itself read-only and shared, so concurrent runs against the
+# same ROOT never mount, chroot into, or write to the same path.
+rootfs_overlay_paths() {
+	local resolved_tmp_dir
+
+	[[ -n ${TMP_DIR-} ]] || env_error "TMP_DIR is not set (required to isolate ROOT per run)" || return 1
+
+	# Canonicalize TMP_DIR (e.g. resolve the /linux/k-lab symlink) so
+	# ROOT_MERGED matches what mount(8) actually records in /proc/mounts.
+	# mount(8) always canonicalizes its target argument; if ROOT_MERGED here
+	# kept a symlinked prefix, every "is this already mounted?" /proc/mounts
+	# lookup below would silently never match, and mount-overlay would stack
+	# a fresh overlay (and rootfs/mount would stack fresh bind mounts) on
+	# every single call instead of detecting the existing one.
+	resolved_tmp_dir=$(realpath -m -- "$TMP_DIR") || {
+		env_error "unable to resolve TMP_DIR: $TMP_DIR"
+		return 1
+	}
+
+	ROOTFS_UPPER=$resolved_tmp_dir/rootfs/upper
+	ROOTFS_WORK=$resolved_tmp_dir/rootfs/work
+	ROOT_MERGED=$resolved_tmp_dir/rootfs/merged
+
+	export ROOTFS_UPPER ROOTFS_WORK ROOT_MERGED
+	return 0
+}
