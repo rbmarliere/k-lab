@@ -351,7 +351,7 @@ preflight_root() {
 	[[ -d $root ]] || die "ROOT is not a directory: $root"
 
 	root_uid=$(stat -c %u -- "$root") || die "failed to stat ROOT: $root"
-	[[ $root_uid == "$(id -u)" ]] || die "ROOT must be owned by uid $(id -u): $root"
+	[[ $root_uid == 0 ]] || die "ROOT must be owned by root (uid 0): $root"
 
 	detected=$(root_arch "$root")
 	if [[ -n $arch ]]; then

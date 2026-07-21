@@ -1,5 +1,124 @@
 #!/bin/bash -eu
 
+THIS_DIR=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")
+
+# shellcheck disable=SC1091
+source "$THIS_DIR/../env.sh"
+
+VNG_ROOT="${1:?usage: cmd \$ROOTFS [vng-args...] [-- cmd...]}"
+shift
+
+VNG_ROOT=$(realpath "$VNG_ROOT")
+if [[ ! -d $VNG_ROOT ]]; then
+	echo "$VNG_ROOT: no such directory" >&2
+	exit 1
+fi
+
+# Split the caller's remaining args at the first literal "--": everything
+# before it are vng flags, everything after (if anything) is the command
+# the caller wants to run.
+pre_args=()
+post_args=()
+have_dashdash=
+for arg in "$@"; do
+	if [[ -z $have_dashdash && $arg == "--" ]]; then
+		have_dashdash=1
+		continue
+	fi
+	if [[ -n $have_dashdash ]]; then
+		post_args+=("$arg")
+	else
+		pre_args+=("$arg")
+	fi
+done
+
+resolved_arch=$("$BIN"/cross resolve-arch "$VNG_ROOT" "${ARCH-}")
+"$BIN"/cross preflight-vng "$VNG_ROOT" "$resolved_arch"
+
+arch_args=(
+	--busybox "$("$BIN"/cross busybox-path "$resolved_arch")"
+)
+if "$BIN"/cross is-foreign "$resolved_arch"; then
+	cross_compile=$("$BIN"/cross cross-compile "$resolved_arch")
+	arch_args+=(--arch "$("$BIN"/cross vng-arch "$resolved_arch")")
+	if [[ -n $cross_compile ]]; then
+		arch_args+=(--cross-compile "$cross_compile")
+	fi
+fi
+
+# --force-9p is always on below (not just for foreign arch), and 9p does
+# not support some things a real filesystem does, most notably shared
+# writable mmap. This breaks whatever program happens to rely on it,
+# unpredictably (first seen: rpm's "ndb" database backend, e.g. zypper
+# failing with "cannot open Name index using ndb - Operation not
+# permitted" -- reproduces on native arch too, not just foreign). Rather
+# than special-case every affected program, overlay the whole root with a
+# tmpfs upper layer for the session: the kernel transparently copies any
+# file opened for writing onto tmpfs (which has full POSIX semantics), so
+# this class of problem disappears regardless of what triggers it or which
+# arch is booted. Copy the (possibly modified) upper layer back onto the
+# real root before exiting, so changes persist.
+#
+# VNG_ROOT is root-owned, so we cannot just write this file into it as the
+# invoking (possibly unprivileged) user. Get it into place with only
+# already-allowed sudo commands instead: touch a target inside VNG_ROOT,
+# then bind-mount the real, checked-in bin/vng/overlay script onto it.
+overlay_helper="$VNG_ROOT/overlay"
+"$BIN"/run --as-root -- touch "$overlay_helper"
+"$BIN"/run --as-root -- mount --bind "$BIN/vng/overlay" "$overlay_helper"
+post_args=(/overlay "${post_args[@]}")
+have_dashdash=1
+
+vng_port=${VNG_PORT:-$((22000 + RANDOM % 1001))}
+# Automated runs (start-vm) always have a per-run TMP_DIR, so key the helper
+# off that (stable, unique per run) instead of cwd + rootfs basename (cwd is
+# typically the shared kernel tree, and every start-vm run's VNG_ROOT is the
+# same "merged" overlay path, so a cwd-relative name would collide across
+# concurrent runs). Fall back to a cwd-relative name for standalone,
+# interactive use with no TMP_DIR.
+if [[ -n ${TMP_DIR-} ]]; then
+	ssh_helper="$TMP_DIR/vng.ssh"
+else
+	ssh_helper="ssh-$(basename -- "$VNG_ROOT")"
+fi
+trap '"$BIN"/run --as-root -- umount "$overlay_helper" 2>/dev/null || true; rm -f -- "$ssh_helper"' EXIT
+
 export PATH="$VNG_DIR:$VNG_DIR/virtme/guest/bin:$PATH"
 
-exec vng "$@"
+# Reconnect/exec-into-guest helper: since ROOT is root-owned, both this boot
+# and any later SSH connection must run as real root (via bin/run --as-root)
+# so they agree on the same $HOME-derived SSH cache/identity files (see
+# virtme_ng.utils.CACHE_DIR) -- sudo's "always_set_home" means a root-owned
+# boot and a non-root client would otherwise resolve to two different (and
+# mismatched) cache directories. Forward "$@" as-is (rather than collapsing
+# to a single --remote-cmd string) so vng's own quoting (shlex.join) handles
+# multi-word/pre-quoted commands correctly.
+{
+	printf '#!/bin/bash -eu\n'
+	printf '%q --as-root --preserve-env=PATH -- %q --root %q --user root --ssh-tcp --ssh-client %q -- "$@"\n' \
+		"$BIN/run" "$VNG_DIR/vng" "$VNG_ROOT" "$vng_port"
+} >"$ssh_helper"
+chmod +x "$ssh_helper"
+
+set \
+	-- \
+	--root "$VNG_ROOT" \
+	--rw \
+	--user root \
+	--verbose \
+	--network user \
+	--no-virtme-ng-init \
+	--ssh-tcp \
+	--ssh "$vng_port" \
+	--memory "${VNG_MEM:-8G}" \
+	--force-9p \
+	--disable-microvm \
+	"${arch_args[@]}" \
+	"${pre_args[@]}"
+
+if [[ -n $have_dashdash ]]; then
+	set -- "$@" -- "${post_args[@]}"
+fi
+
+set -x
+"$BIN"/run --as-root --preserve-env=PATH -- "$VNG_DIR/vng" "$@"

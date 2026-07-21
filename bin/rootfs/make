@@ -39,14 +39,6 @@ for arg in "$@"; do
 	fi
 done
 
-if [[ ${BUILD_IN_ROOT:-0} != 1 ]] && [[ -n ${ROOT-} ]] && ((has_modules_install)) && "$BIN"/cross is-foreign "${ARCH:-x86_64}"; then
-	# No chroot needed for a plain file copy, but still write into this
-	# run's private overlay view, not ROOT itself.
-	"$BIN"/rootfs/mount-overlay
-	root_merged=$TMP_DIR/rootfs/merged
-	exec "${cmd[@]}" INSTALL_MOD_PATH="$root_merged" "$@"
-fi
-
 cmd+=("$@")
 
 if ((has_modules_install)); then

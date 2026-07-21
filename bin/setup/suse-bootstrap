@@ -30,22 +30,6 @@ EOF
 	chmod +x "$ROOT/zypper"
 }
 
-fix_ownership() {
-	[[ -d $ROOT ]] || return 0
-	local owner=${SUDO_USER:-$USER}
-	chown -R -- "$owner:$owner" "$ROOT"
-}
-
-on_exit() {
-	local status=$?
-	if ! fix_ownership; then
-		echo "WARN: failed to fix ownership: $ROOT" >&2
-	fi
-	# remove setuid from /bin/mount and others, so vng boots with unshare
-	find "$ROOT" -xdev -perm /6000 -exec chmod -s {} \;
-	return "$status"
-}
-
 pkg=(aaa_base busybox coreutils iproute2 util-linux zypper)
 repos=(
 	"https://download.opensuse.org/tumbleweed/repo/oss/ opensuse"
@@ -77,8 +61,6 @@ for repo in "${repos[@]}"; do
 	read -r -a repo_args <<<"$repo"
 	zyp addrepo --refresh --no-gpgcheck "${repo_args[@]}"
 done
-
-trap on_exit EXIT
 
 zyp install --no-recommends "${pkg[@]}"
 write_zypper_helper

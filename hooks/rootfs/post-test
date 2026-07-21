@@ -2,4 +2,12 @@
 
 [[ -n ${ROOT-} ]] || exit 0
 
-"$BIN"/rootfs/umount
+# Best-effort: the VM is normally still running at this point (it only gets
+# killed later, by hooks/vng/post-ktest's stop-vm call), so these bind
+# mounts are expected to still be busy here. A failure here must not abort
+# the calling "&&" chain: hooks/rootfs/post-ktest runs later in the same
+# chain as hooks/vng/post-ktest, whose bin/rootfs/umount-overlay already
+# does its own robust retry of this same cleanup once the VM is confirmed
+# dead. If this fails and aborts the chain, stop-vm never gets a chance to
+# run and the VM is left running indefinitely.
+"$BIN"/rootfs/umount || true
