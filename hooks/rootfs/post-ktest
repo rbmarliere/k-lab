@@ -1,6 +1,7 @@
 #!/bin/bash -eu
 
-[[ -n ${ROOT-} ]] || exit 0
+[[ -n ${ROOT_DISK-} ]] || exit 0
+[[ -d $ROOT_DISK ]] || exit 0
 
 # Best-effort and must not abort the calling "&&" chain: this hook runs
 # before hooks/vng/post-ktest in POST_KTEST, and the VM is normally still

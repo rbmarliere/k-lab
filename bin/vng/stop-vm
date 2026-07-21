@@ -55,9 +55,8 @@ fi
 # The group kill above only reaches "$BIN"/vng/cmd, bin/run, and sudo itself:
 # sudo puts the actual (now root-owned) vng/qemu process in its own session,
 # decoupled from the "setsid vng/cmd" group vng.pid tracks, so it survives
-# as an orphan otherwise. Fall back to a marker-based kill on TMP_DIR/rootfs/
-# merged: start-vm always passes that exact path as VNG_ROOT, so it ends up
-# in the real qemu process's own argv (e.g. "-fsdev ...,path=...").
+# as an orphan otherwise. Fall back to a marker-based kill on the root disk:
+# start-vm passes it to vng/cmd, so it ends up in the real qemu process argv.
 #
 # This must NOT be a bare "$TMP_DIR/" pattern: this script is itself called
 # from hooks/vng/pre-ktest, which ktest.pl invokes as
@@ -67,11 +66,11 @@ fi
 # whole chain, so a bare "$TMP_DIR/" pattern matches it too -- pkill would
 # then kill the very process still running the rest of the chain (including
 # this script), aborting everything after it right here, silently.
-if [[ -n ${TMP_DIR-} ]]; then
-	pattern="${TMP_DIR}/rootfs/merged"
+if [[ -n ${ROOT_DISK-} && -f ${ROOT_DISK-} ]]; then
+	pattern=$(realpath "$ROOT_DISK")
 	if pgrep -f -- "$pattern" >/dev/null 2>&1; then
 		"$BIN"/run --as-root pkill -f -- "$pattern" || true
-		wait_for_pattern_exit "$pattern" || echo "WARN: vng still running (TMP_DIR $TMP_DIR)" >&2
+		wait_for_pattern_exit "$pattern" || echo "WARN: vng still running (ROOT_DISK $pattern)" >&2
 	fi
 fi
 

@@ -1,9 +1,10 @@
 #!/bin/bash -eu
 
-[[ -n ${ROOT-} ]] || exit 0
+[[ -n ${ROOT_DISK-} ]] || exit 0
+[[ -d $ROOT_DISK ]] || exit 0
 
-# ROOT is root-owned; install modules via a real root chroot into this run's
-# private overlay view (see bin/rootfs/run), never into ROOT itself. This
+# ROOT_DISK is root-owned; install modules via a real root chroot into this run's
+# private overlay view (see bin/rootfs/run), never into ROOT_DISK itself. This
 # also means the usrmerge /lib -> /usr/lib symlink (if any) is resolved
 # naturally by the real install, with no manual detection needed.
 "$BIN"/rootfs/make DEPMOD=true modules_install

@@ -47,6 +47,29 @@ normalize_root() {
 	esac
 }
 
+# Infer an arch from a disk image's filename, e.g. aarch64.img/arm64.img ->
+# arm64, s390x.img -> s390, ppc64le.img -> powerpc. ROOT_DISK is now a disk image
+# passed to virtme-ng's --root-disk, not a directory, so unlike the old
+# directory-rootfs ELF probe below, this is a naming convention, not a hard
+# filesystem inspection.
+disk_arch() {
+	local path=$1
+	local name stem
+
+	[[ -n $path ]] || return 1
+
+	name=$(basename -- "$path")
+	stem=${name%.*}
+	case "$stem" in
+	x86_64 | amd64 | x86 | aarch64 | arm64 | arm | armhf | powerpc | ppc64 | ppc64el | ppc64le | s390 | s390x | riscv | riscv64)
+		normalize_arch "$stem"
+		;;
+	*)
+		return 1
+		;;
+	esac
+}
+
 build_target() {
 	local arch
 
@@ -211,7 +234,7 @@ probe_root_elf() {
 		local depth=0
 
 		while [[ -L $path ]]; do
-			((depth++ < 40)) || die "too many symlinks while probing ROOT=$root"
+			((depth++ < 40)) || die "too many symlinks while probing ROOT_DISK=$root"
 
 			target=$(readlink -- "$path") || die "failed to read symlink: $path"
 			if [[ $target == /* ]]; then
@@ -225,7 +248,7 @@ probe_root_elf() {
 			"$root" | "$root"/*)
 				;;
 			*)
-				die "symlink escapes ROOT=$root: $path"
+				die "symlink escapes ROOT_DISK=$root: $path"
 				;;
 			esac
 		done
@@ -234,8 +257,8 @@ probe_root_elf() {
 	}
 
 	[[ -n $root ]] || return 1
-	[[ -d $root ]] || die "ROOT is not a directory: $root"
-	root=$(realpath -e -- "$root") || die "failed to resolve ROOT=$root_display"
+	[[ -d $root ]] || die "ROOT_DISK is not a directory: $root"
+	root=$(realpath -e -- "$root") || die "failed to resolve ROOT_DISK=$root_display"
 
 	for rel in /bin/sh /usr/bin/env /bin/bash /usr/bin/bash /lib/systemd/systemd /sbin/init; do
 		path=$root$rel
@@ -252,7 +275,7 @@ probe_root_elf() {
 		fi
 	done
 
-	die "unable to find an ELF userspace binary under ROOT=$root"
+	die "unable to find an ELF userspace binary under ROOT_DISK=$root"
 }
 
 root_arch() {
@@ -298,7 +321,7 @@ root_arch() {
 			printf '%s\n' powerpc
 			;;
 		*)
-			die "unsupported PowerPC rootfs endianness under ROOT=$root"
+			die "unsupported PowerPC rootfs endianness under ROOT_DISK=$root"
 			;;
 		esac
 		;;
@@ -309,7 +332,7 @@ root_arch() {
 		printf '%s\n' riscv
 		;;
 	*)
-		die "unsupported ROOT architecture '$machine' under ROOT=$root"
+		die "unsupported ROOT_DISK architecture '$machine' under ROOT_DISK=$root"
 		;;
 	esac
 }
@@ -318,15 +341,13 @@ resolve_arch() {
 	local root=${1-}
 	local arch=${2-}
 
-	root=$(normalize_root "$root")
-
 	if [[ -n $arch ]]; then
 		normalize_arch "$arch"
 		return 0
 	fi
 
-	if [[ -n $root ]]; then
-		root_arch "$root"
+	root=$(normalize_root "$root")
+	if [[ -n $root ]] && disk_arch "$root" 2>/dev/null; then
 		return 0
 	fi
 
@@ -348,16 +369,16 @@ preflight_root() {
 
 	root=$(normalize_root "$root")
 	[[ -n $root ]] || return 0
-	[[ -d $root ]] || die "ROOT is not a directory: $root"
+	[[ -d $root ]] || die "ROOT_DISK is not a directory: $root"
 
-	root_uid=$(stat -c %u -- "$root") || die "failed to stat ROOT: $root"
-	[[ $root_uid == 0 ]] || die "ROOT must be owned by root (uid 0): $root"
+	root_uid=$(stat -c %u -- "$root") || die "failed to stat ROOT_DISK: $root"
+	[[ $root_uid == 0 ]] || die "ROOT_DISK must be owned by root (uid 0): $root"
 
 	detected=$(root_arch "$root")
 	if [[ -n $arch ]]; then
 		arch=$(normalize_arch "$arch")
 		if [[ $arch != "$detected" ]]; then
-			die "ARCH=$arch does not match ROOT=$root ($detected)"
+			die "ARCH=$arch does not match ROOT_DISK=$root ($detected)"
 		fi
 	else
 		arch=$detected
@@ -365,19 +386,23 @@ preflight_root() {
 
 }
 
+# Fast fail-fast checks before a build/boot even starts. ROOT_DISK (a disk image)
+# may legitimately be unset for build-only tests that never boot a VM; in
+# that case bin/vng/cmd itself is the real enforcement point (it always
+# requires a valid disk image, whenever it is actually invoked).
 preflight_vng() {
 	local root=${1-}
 	local arch=${2-}
 	local busybox
 
 	root=$(normalize_root "$root")
-	arch=$(resolve_arch "$root" "$arch")
+	if [[ -n $root ]]; then
+		[[ -f $root ]] || die "ROOT_DISK is not a regular file (expected a disk image): $root"
+	fi
+
+	arch=$(normalize_arch "$arch")
 	busybox=$(busybox_path "$arch")
 	[[ -x $busybox ]] || die "missing static busybox: $busybox (run $THIS_DIR/bin/setup/build-busybox $arch)"
-
-	if is_foreign "$arch"; then
-		[[ -n $root ]] || die "ARCH=$arch requires ROOT for virtme-ng runs"
-	fi
 }
 
 usage() {
@@ -388,10 +413,11 @@ commands:
   build-target <arch>
   busybox-path <arch>
   cross-compile <arch>
+  disk-arch <path>
   is-foreign <arch>
   normalize-arch <arch>
   preflight-root <root> [arch]
-  preflight-vng <root> [arch]
+  preflight-vng [root] [arch]
   resolve-arch [root] [arch]
   root-arch <root>
   suse-arch <arch>
@@ -414,6 +440,10 @@ busybox-path)
 cross-compile)
 	[[ $# -eq 1 ]] || die "usage: cross cross-compile <arch>"
 	cross_compile "$1"
+	;;
+disk-arch)
+	[[ $# -eq 1 ]] || die "usage: cross disk-arch <path>"
+	disk_arch "$1"
 	;;
 is-foreign)
 	[[ $# -eq 1 ]] || die "usage: cross is-foreign <arch>"

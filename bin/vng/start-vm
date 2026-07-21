@@ -1,13 +1,6 @@
 #!/bin/bash -eu
 
-# Give this VM its own private, writable overlay over ROOT (see
-# rootfs_overlay_paths in bin/env.sh) instead of passing --rw straight
-# through to the shared, host-persistent ROOT tree: virtme-ng's --root
-# is a raw 9p/virtiofs passthrough with no COW of its own, so two VMs
-# booted with --root "$ROOT" --rw would both write back into the same
-# host directory.
-"$BIN"/rootfs/mount-overlay
-root_merged=$TMP_DIR/rootfs/merged
+root_disk=$(realpath "$ROOT_DISK")
 
 set -- \
 	--run "$OUTPUT_DIR" \
@@ -15,9 +8,9 @@ set -- \
 	--rwdir "$OUTPUT_DIR=$OUTPUT_DIR" \
 	"$@"
 
-echo "$BIN/vng/cmd $root_merged $* -- sleep infinity" >"$TMP_DIR"/vng.cmd
+echo "$BIN/vng/cmd $root_disk $* -- sleep infinity" >"$TMP_DIR"/vng.cmd
 
 "$BIN"/vng/start-console
 
-setsid "$BIN"/vng/cmd "$root_merged" "$@" -- sleep infinity </dev/null &>"$TMP_DIR"/vng.log &
+setsid "$BIN"/vng/cmd "$root_disk" "$@" -- sleep infinity </dev/null &>"$TMP_DIR"/vng.log &
 echo $! >"$TMP_DIR"/vng.pid
