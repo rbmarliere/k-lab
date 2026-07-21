@@ -205,7 +205,7 @@ _kt_preflight_oldconfig() {
 		"INFO: BUILD_TYPE is oldconfig and ${output_dir}/.config" \
 		"      already exists. Reusing a stale config may silently" \
 		"      disable features required by this test." >&2
-	printf 'Continue [y], wipe and rebuild from defconfig [w], or abort [n]? ' >&2
+	printf 'Continue [Y], wipe and rebuild from defconfig [w], or abort [n]? ' >&2
 	if ! IFS= read -r reply; then
 		echo >&2
 		return 2
