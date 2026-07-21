@@ -3,7 +3,9 @@ VNG_PORT := 40404
 INCLUDE ../include/defaults.conf
 
 DEFAULTS OVERRIDE
-DEPS = libcap tcpdump libnuma python3-yaml python3-jsonschema iperf iproute2 net-tools net-tools-deprecated ipv6toolkit netsniff-ng smcroute dropwatch
+# Needs: libcap tcpdump libnuma python3-yaml python3-jsonschema iperf
+# iproute2 net-tools net-tools-deprecated ipv6toolkit netsniff-ng smcroute
+# dropwatch
 VNG_ARGS = --user root
 DIE_ON_FAILURE = 0
 BUILD_TYPE = defconfig

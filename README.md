@@ -128,11 +128,9 @@ If you build for a non-native `ARCH` on the host, the host also needs a usable
 cross toolchain. By default, k-lab derives `CROSS_COMPILE` from `ARCH`;
 `setup.conf` may override that with `CROSS_COMPILE_*`.
 
-`DEPS` adds test-specific packages on top of the built-in base tool list.
-Package names go through the distro-specific maps under `pkg/` when a mapping
-exists. k-lab assumes `ROOT` (or the host, when not using `ROOT`) already has
-everything installed; it only checks and fails loudly listing what is
-missing. It never installs or otherwise modifies `ROOT`.
+k-lab does not check or install packages into `ROOT`: the rootfs is assumed
+to already be fully set up with whatever a test needs before you point
+`ROOT` at it.
 
 ## Writing Tests
 
@@ -172,7 +170,6 @@ Use `=` for normal runtime options such as:
 - `CC`
 - `HOSTCC`
 - `HOSTCFLAGS`
-- `DEPS`
 - `VNG_MEM`
 - `VNG_ARGS`
 - `BUILD_IN_ROOT`
@@ -220,8 +217,8 @@ only ever mounts, `chroot`s into, or writes to that private view -- never
 runs (e.g. several agents) at the same `ROOT` at once: they never share a
 mountpoint, and nothing one run writes (installed packages, kernel modules,
 temp files) is visible to another run or persisted back into `ROOT`. Keep
-`ROOT` itself provisioned with everything your tests need ahead of time (see
-Dependencies above); k-lab does not modify it.
+`ROOT` itself provisioned with everything your tests need ahead of time;
+k-lab does not modify it.
 
 By default, builds still happen on the host. Set `BUILD_IN_ROOT = 1` if you
 want the kernel build to happen inside the rootfs instead.
@@ -277,12 +274,6 @@ For the built-in flows, the expected sudoers allowlist is:
 - `/usr/bin/mount`
 - `/usr/bin/umount`
 
-`bin/check-deps` (used automatically by `hooks/pre-build` for `DEPS`) only
-ever reads package state, so it needs no extra sudoers entries beyond the
-ones above. `bin/install` is a separate, manual package-installer helper (not
-run automatically); if you use it, it additionally needs whatever it
-`exec`s for your distro, e.g. `/usr/bin/apt-get` or `/usr/bin/zypper`.
-
 Some setup helpers also use `sudo`; keep that in mind when preparing a new
 host.
 
@@ -294,5 +285,4 @@ host.
 - `bin/`: runtime helpers used by generated `ktest.pl` commands
 - `bin/setup/`: setup-time helpers
 - `config/`: extra kernel config fragments
-- `pkg/`: distro-specific package name maps
 - `tools/`: repo-local tool state
