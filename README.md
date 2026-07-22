@@ -58,30 +58,32 @@ Examples:
 # only, no boot, so no ROOT_DISK is needed)
 kt
 
-# boot a disk image and run the smoke test's boot check
-kt -D ROOT_DISK:=/roots/suse/Tumbleweed/x86_64.img -D TEST:=boot smoke/test
+# boot a disk image and run the smoke test's boot check; smoke/test sets its
+# own default ROOT_DISK (a Tumbleweed x86_64 image), so no flag is needed
+kt -D TEST:=boot smoke/test
 
 # don't clean the current $OUTPUT_DIR, but force a defconfig
 kt -C -D BUILD_TYPE=defconfig
 
 # specify target and host compiler overrides and ssh port to use
-kt -D ROOT_DISK:=/roots/suse/Tumbleweed/x86_64.img -D CC:=gcc-13 -D VNG_PORT:=22001 -D TEST:=boot smoke/test
+kt -D CC:=gcc-13 -D VNG_PORT:=22001 -D TEST:=boot smoke/test
 
-# boot a foreign-arch disk image; ARCH is inferred from its filename
-# (aarch64.img/arm64.img -> arm64, s390x.img -> s390, ppc64le.img -> powerpc)
+# override the test's default ROOT_DISK for a single run: boot a foreign-arch
+# disk image instead; ARCH is inferred from its filename (aarch64.img/
+# arm64.img -> arm64, s390x.img -> s390, ppc64le.img -> powerpc)
 kt -D ROOT_DISK:=/roots/suse/Tumbleweed/aarch64.img -D TEST:=boot smoke/test
 
 # build inside a target rootfs's own chroot (CHROOT_BUILD), using its own
 # native toolchain (foreign arch transparently emulated via qemu-user), then
-# boot a matching disk image
+# boot a matching (overridden) disk image
 kt -D ROOT_DISK:=/roots/suse/Tumbleweed/aarch64.img \
    -D CHROOT:=/roots/suse/Tumbleweed/aarch64 -D CHROOT_BUILD=1 -D TEST:=chroot-boot smoke/test
 
 # build a tumbleweed kernel
-kt -D ROOT_DISK:=/roots/suse/Tumbleweed/x86_64.img -D TEST:=suse-only -D BRANCH:=stable
+kt -D TEST:=suse-only -D BRANCH:=stable
 
 # also refresh compile_commands.json after the build
-kt -D ROOT_DISK:=/roots/suse/Tumbleweed/x86_64.img -D COMPILE_COMMANDS:=1 -D TEST:=boot smoke/test
+kt -D COMPILE_COMMANDS:=1 -D TEST:=boot smoke/test
 ```
 
 Wrapper options:
@@ -93,7 +95,10 @@ Wrapper options:
   itself only actively rejects (with an error) a plain `-D name=value` for
   `ROOT_DISK`, `ARCH`, and `VNG_PORT`; passing `TEST`, `CHROOT`, or
   `CROSS_COMPILE` without `:=` is not caught by `kt` and silently resolves to
-  an empty value instead of erroring, so always use `:=` for these six.
+  an empty value instead of erroring, so always use `:=` for these six. For
+  `ROOT_DISK` specifically, prefer setting it inside the test file itself
+  (see "Writing Tests"); use this flag mainly to override that default for a
+  single ad hoc run against a different image.
 - `-n` prints the resolved config and exits
 
 Before a real run, `kt` does its own `ktest.pl --dry-run`, preflights
@@ -160,6 +165,8 @@ paths are relative to that directory (`../../include/...`).
 Minimal shape:
 
 ```conf
+# ROOT_DISK := /path/to/x86_64.img   # only if the test boots a VM
+
 INCLUDE ../../include/defaults.conf
 
 DEFAULTS OVERRIDE
@@ -171,6 +178,11 @@ TEST_TYPE = test
 TEST_BIN = ./my-test.sh
 TEST = ${DO_TEST_SIMPLE}
 ```
+
+If a test boots a VM, set `ROOT_DISK := /path/to/image.img` before `INCLUDE`
+so a bare `kt <dir>/<file>` reproduces the run on its own; reserve
+`-D ROOT_DISK:=/other/image.img` on the command line for one-off overrides
+(e.g. trying the same test against a different image or arch).
 
 For BPF selftests, also include `include/selftests-bpf.conf` after
 `defaults.conf`: it installs the `bpf` collection during the build and
@@ -251,7 +263,12 @@ Set `ROOT_DISK := /path/to/disk.img` to boot that disk image via
 virtme-ng's `--root-disk` instead of sharing the host filesystem.
 `ROOT_DISK` must be a regular file (a raw or qcow2-style image with an ext4
 filesystem inside); k-lab does not support pointing `ROOT_DISK` at a
-directory.
+directory. Prefer setting `ROOT_DISK` inside the test file itself (before
+`INCLUDE`), the same way `tests/smoke/test` hardcodes a default `CHROOT`,
+rather than only ever passing it via `-D ROOT_DISK:=` on the command line:
+that keeps a bare `kt <dir>/<file>` self-contained and reproducible. Use the
+CLI flag to override that default for a single run against a different
+image.
 
 If `ARCH` is not set explicitly (and no `--arch` is forwarded via
 `VNG_ARGS`), it is inferred from `ROOT_DISK`'s filename: `aarch64.img`/
