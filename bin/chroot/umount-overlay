@@ -15,7 +15,21 @@ fi
 
 # Best-effort: clear any leftover mounts under the merged view first (proc,
 # dev, sys, resolv.conf, OUTPUT_DIR, BUILD_DIR) so the overlay itself is not
-# busy. Normally these are already gone by the time this runs.
+# busy. Normally these are already gone by the time this runs; its own
+# retries/lazy-unmount fallback mean it should not leave anything behind,
+# but do not let a failure there block also trying to tear down the overlay.
 "$BIN"/chroot/umount || true
 
-"$BIN"/run --as-root umount "$CHROOT_MERGED"
+# Same retry + lazy-unmount-as-last-resort as bin/chroot/umount, and for the
+# same reason: BUILD_DIR is bind-mounted (via the overlay's lowerdir=CHROOT
+# plus the binds above) into this view, so a stale overlay mount left behind
+# is not just messy but dangerous under a later "rm -rf" of TMP_DIR.
+for ((attempt = 0; attempt < 5; attempt++)); do
+	"$BIN"/run --as-root umount "$CHROOT_MERGED" 2>/dev/null && exit 0
+	grep -q " $CHROOT_MERGED " /proc/mounts 2>/dev/null || exit 0
+	sleep 0.2
+done
+
+echo "WARN: $CHROOT_MERGED still busy after retries, forcing a lazy unmount" >&2
+"$BIN"/run --as-root umount -l "$CHROOT_MERGED" 2>/dev/null
+! grep -q " $CHROOT_MERGED " /proc/mounts 2>/dev/null
