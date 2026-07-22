@@ -128,6 +128,25 @@ _kt_dry_run_value() {
 	sed -n "s/^${key} = //p" | head -n 1
 }
 
+# Extract a k-lab env var's resolved value from the "SETENV = env ..." line of
+# ktest.pl --dry-run output (read on stdin). Needed for ROOT_DISK, CHROOT, and
+# ARCH: these are parse-time ":=" config variables, so ktest.pl never emits a
+# bare "KEY = ..." option line for them (unlike CHROOT_BUILD, a real option).
+# Their resolved values only ever surface inside SETENV/PRE_KTEST, where
+# include/*.conf appends them via "ENV := ${ENV} KEY=...". Handles both the
+# KEY="quoted value" and KEY=bareword forms; prints the first match.
+_kt_setenv_value() {
+	local key=$1
+	local line
+	line=$(sed -n 's/^SETENV = //p' | head -n 1)
+	[[ -n $line ]] || return 0
+	if [[ $line =~ (^|[[:space:]])${key}=\"([^\"]*)\" ]]; then
+		printf '%s\n' "${BASH_REMATCH[2]}"
+	elif [[ $line =~ (^|[[:space:]])${key}=([^[:space:]\"]*) ]]; then
+		printf '%s\n' "${BASH_REMATCH[2]}"
+	fi
+}
+
 _kt_normalize_root_disk_value() {
 	local root_disk=${1-}
 
@@ -381,14 +400,16 @@ kt() {
 
 	local root_disk arch chroot_build chroot_dir
 	local summary_parts=()
-	root_disk=$(_kt_normalize_root_disk_value "$(printf '%s\n' "$dry_run_output" | _kt_dry_run_value ROOT_DISK)")
-	arch=$(printf '%s\n' "$dry_run_output" | _kt_dry_run_value ARCH)
+	root_disk=$(_kt_normalize_root_disk_value "$(printf '%s\n' "$dry_run_output" | _kt_setenv_value ROOT_DISK)")
+	arch=$(printf '%s\n' "$dry_run_output" | _kt_setenv_value ARCH)
 	if [[ -n $root_disk ]]; then
 		_kt_preflight_root_disk "$root_disk" || return 1
 	fi
 
+	# CHROOT_BUILD is a real ktest.pl option ("="), so read it as an option
+	# line; CHROOT is a ":=" variable, so read its value from SETENV instead.
 	chroot_build=$(printf '%s\n' "$dry_run_output" | _kt_dry_run_value CHROOT_BUILD)
-	chroot_dir=$(printf '%s\n' "$dry_run_output" | _kt_dry_run_value CHROOT)
+	chroot_dir=$(printf '%s\n' "$dry_run_output" | _kt_setenv_value CHROOT)
 	if [[ ${chroot_build:-0} == 1 ]]; then
 		_kt_preflight_chroot "$chroot_build" "$chroot_dir" || return 1
 	fi
