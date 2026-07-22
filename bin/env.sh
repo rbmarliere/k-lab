@@ -15,6 +15,19 @@ BUSYBOX_DIR=$TOOLS_DIR/busybox
 
 export THIS_DIR BIN SETUP_CONF TOOLS_DIR KTEST_DIR VNG_DIR BUSYBOX_DIR
 
+# Canonical list of the k-lab runtime env: the variables that must survive the
+# ktest.pl -> shell boundary into hooks/ and the rest of bin/. This is the
+# single source of truth consumed by bin/write-env (which persists them to
+# $TMP_DIR/env.sh for bin/run to re-source). Each name here, except BIN (set
+# above), is fed across the boundary by a matching "ENV := ${ENV} K=..." line
+# in include/*.conf; keep the two in sync when adding or removing a variable.
+KLAB_ENV_KEYS=(
+	BIN TOOLS_DIR BUILD_DIR BUILD_OPTIONS ROOT_DISK CHROOT_BUILD CHROOT
+	ARCH CROSS_COMPILE BUILD_TARGET VNG_DIR VNG_PORT VNG_MEM TMP_DIR OUTPUT_DIR
+	CC HOSTCC HOSTCFLAGS COMPILE_COMMANDS
+)
+export KLAB_ENV_KEYS
+
 env_error() {
 	echo "ERROR: $*" >&2
 	return 1
