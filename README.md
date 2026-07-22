@@ -42,7 +42,9 @@ Bootstrap:
    `./bin/setup/build-busybox x86_64`.
 4. Source the wrapper:
 
-   ```bash source /path/to/k-lab.sh ```
+   ```bash
+   source /path/to/k-lab.sh
+   ```
 
 5. From inside a Linux kernel worktree, run `kt`.
 
@@ -56,33 +58,30 @@ Examples:
 # only, no boot, so no ROOT_DISK is needed)
 kt
 
-# run the minimal vng test config, booting a disk image
-kt -D ROOT_DISK:=/roots/suse/Tumbleweed/x86_64.img vng
-
-# build and run all net selftests
-kt -D ROOT_DISK:=/roots/suse/Tumbleweed/x86_64.img -D TEST:=all selftests/net
+# boot a disk image and run the smoke test's boot check
+kt -D ROOT_DISK:=/roots/suse/Tumbleweed/x86_64.img -D TEST:=boot smoke/test
 
 # don't clean the current $OUTPUT_DIR, but force a defconfig
 kt -C -D BUILD_TYPE=defconfig
 
 # specify target and host compiler overrides and ssh port to use
-kt -D ROOT_DISK:=/roots/suse/Tumbleweed/x86_64.img -D CC:=gcc-13 -D VNG_PORT:=22001 vng
+kt -D ROOT_DISK:=/roots/suse/Tumbleweed/x86_64.img -D CC:=gcc-13 -D VNG_PORT:=22001 -D TEST:=boot smoke/test
 
 # boot a foreign-arch disk image; ARCH is inferred from its filename
 # (aarch64.img/arm64.img -> arm64, s390x.img -> s390, ppc64le.img -> powerpc)
-kt -D ROOT_DISK:=/roots/suse/Tumbleweed/aarch64.img vng
+kt -D ROOT_DISK:=/roots/suse/Tumbleweed/aarch64.img -D TEST:=boot smoke/test
 
 # build inside a target rootfs's own chroot (CHROOT_BUILD), using its own
 # native toolchain (foreign arch transparently emulated via qemu-user), then
 # boot a matching disk image
 kt -D ROOT_DISK:=/roots/suse/Tumbleweed/aarch64.img \
-   -D CHROOT:=/roots/suse/Tumbleweed/aarch64 -D CHROOT_BUILD:=1 vng
+   -D CHROOT:=/roots/suse/Tumbleweed/aarch64 -D CHROOT_BUILD=1 -D TEST:=chroot-boot smoke/test
 
 # build a tumbleweed kernel
 kt -D ROOT_DISK:=/roots/suse/Tumbleweed/x86_64.img -D TEST:=suse-only -D BRANCH:=stable
 
 # also refresh compile_commands.json after the build
-kt -D ROOT_DISK:=/roots/suse/Tumbleweed/x86_64.img -D COMPILE_COMMANDS:=1 vng
+kt -D ROOT_DISK:=/roots/suse/Tumbleweed/x86_64.img -D COMPILE_COMMANDS:=1 -D TEST:=boot smoke/test
 ```
 
 Wrapper options:
@@ -153,12 +152,15 @@ point `ROOT_DISK` at it.
 
 `include/defaults.conf` is the shared base layer stack. Most new tests should
 include it and then define only the test-local pieces they care about, as
-`tests/vng` does.
+`tests/smoke` does.
+
+Tests live in their own subdirectory (`tests/<name>/test`), so `INCLUDE`
+paths are relative to that directory (`../../include/...`).
 
 Minimal shape:
 
 ```conf
-INCLUDE ../include/defaults.conf
+INCLUDE ../../include/defaults.conf
 
 DEFAULTS OVERRIDE
 BUILD_TYPE = defconfig
@@ -167,6 +169,21 @@ ADD_CONFIG = ${CONFIG_DIR}/my.config
 TEST_START
 TEST_TYPE = test
 TEST_BIN = ./my-test.sh
+TEST = ${DO_TEST_SIMPLE}
+```
+
+For BPF selftests, also include `include/selftests-bpf.conf` after
+`defaults.conf`: it installs the `bpf` collection during the build and
+prepares the guest to run `test_progs` from the install tree, so a test only
+needs to pick a `TEST_BIN`:
+
+```conf
+INCLUDE ../../include/defaults.conf
+INCLUDE ../../include/selftests-bpf.conf
+
+TEST_START
+TEST_TYPE = test
+TEST_BIN = ./test_progs -vv -t <subtest>
 TEST = ${DO_TEST_SIMPLE}
 ```
 
