@@ -130,24 +130,30 @@ require_vng() {
 }
 
 resolve_root_disk() {
+	local resolved
+
 	[[ -n ${ROOT_DISK-} ]] || env_error "ROOT_DISK is not set" || return 1
 
-	if ! ROOT_DISK=$(realpath -- "$ROOT_DISK" 2>/dev/null); then
+	if ! resolved=$(realpath -- "$ROOT_DISK" 2>/dev/null); then
 		env_error "unable to resolve ROOT_DISK: $ROOT_DISK"
 		return 1
 	fi
+	ROOT_DISK=$resolved
 
 	export ROOT_DISK
 	return 0
 }
 
 resolve_chroot() {
+	local resolved
+
 	[[ -n ${CHROOT-} ]] || env_error "CHROOT is not set" || return 1
 
-	if ! CHROOT=$(realpath -- "$CHROOT" 2>/dev/null); then
+	if ! resolved=$(realpath -- "$CHROOT" 2>/dev/null); then
 		env_error "unable to resolve CHROOT: $CHROOT"
 		return 1
 	fi
+	CHROOT=$resolved
 	if [[ ! -d $CHROOT ]]; then
 		env_error "CHROOT is not a directory: $CHROOT"
 		return 1
