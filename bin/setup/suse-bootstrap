@@ -1,11 +1,43 @@
 #!/bin/bash -eu
 
+# Bootstrap a native-architecture Tumbleweed rootfs under $ROOT (default
+# /roots/tumbleweed) using zypper's own --root path-prefixing -- this is
+# libzypp's native path-prefixing (like `rpm --root`), never a real chroot,
+# so it only ever targets the native architecture.
+#
+# Runs fully unprivileged: the script re-execs itself under `fakeroot` (one
+# shared `faked` session for the whole run) so RPM payload extraction can
+# chown()/mknod() as it expects without real root.
+#
+# Caveat: files that appear "root-owned" inside the resulting rootfs are
+# only fake-owned within that fakeroot session -- on disk they belong to
+# the invoking user. That is fine (arguably an improvement) for using this
+# rootfs as a k-lab CHROOT target, since bin/chroot/* already chroots in as
+# real/namespaced root and/or --userspec=uid:gid regardless of what
+# nominally owns the files on the host. It does matter if this rootfs is
+# later shipped somewhere that expects genuinely root-owned files (e.g.
+# packaged as an appliance image) -- in that case use `fakeroot -s
+# <statefile>`/`fakeroot -i <statefile>` to persist and replay the fake
+# ownership database, or do a final real-root `chown -R root:root` pass at
+# packaging time.
+#
+# Env vars:
+#   ROOT   target rootfs directory (default /roots/tumbleweed)
+#   EXTRA  extra packages to install, space-separated
+#
+# Extra zypper repos may be piped in on stdin (one "URL alias" pair per
+# line); otherwise the default openSUSE OSS repo is used.
+
+if [[ -z ${FAKEROOTKEY-} ]]; then
+	command -v fakeroot >/dev/null 2>&1 || {
+		echo "ERROR: fakeroot is required (zypper install fakeroot)" >&2
+		exit 1
+	}
+	exec fakeroot -- "$0" "$@"
+fi
+
 ROOT=${ROOT:-/roots/tumbleweed}
 
-if [[ $(id -u) -gt 0 ]]; then
-	echo "ERROR: need uid=0"
-	exit 1
-fi
 if [[ -e $ROOT ]]; then
 	echo "ERROR: file exists ($ROOT)"
 	exit 1
@@ -25,7 +57,7 @@ write_zypper_helper() {
 	cat >"$ROOT/zypper" <<EOF
 #!/bin/bash
 ROOT=\$(dirname -- "\$(realpath -- "\${BASH_SOURCE[0]}")")
-sudo zypper --non-interactive --root "\$ROOT" "\$@"
+fakeroot -- zypper --non-interactive --root "\$ROOT" "\$@"
 EOF
 	chmod +x "$ROOT/zypper"
 }
