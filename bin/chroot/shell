@@ -10,31 +10,40 @@ THIS_DIR=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")
 # shellcheck disable=SC1091
 source "$THIS_DIR/../env.sh"
 
+# usage: shell CHROOT [-- cmd...]
+CHROOT=${1:?usage: shell CHROOT [-- cmd...]}
+shift
+
 resolve_chroot || exit 1
-chroot_overlay_paths || exit 1
 
-mounted=
-cleanup() {
-	local rc=$?
-
-	if [[ -n $mounted ]]; then
-		if ! "$BIN"/chroot/umount; then
-			echo "ERROR: failed to unmount chroot at CHROOT=$CHROOT" >&2
-			if [[ $rc -eq 0 ]]; then
-				rc=1
-			fi
-		fi
-		if ! "$BIN"/chroot/umount-overlay; then
-			echo "ERROR: failed to unmount chroot overlay at CHROOT=$CHROOT" >&2
-			if [[ $rc -eq 0 ]]; then
-				rc=1
-			fi
-		fi
+as_root() {
+	if [[ $(id -u) -eq 0 ]]; then
+		"$@"
+	else
+		sudo "$@"
 	fi
+}
+
+mounts=()
+cleanup() {
+	local rc=$? m i
+
+	for ((i = ${#mounts[@]} - 1; i >= 0; i--)); do
+		m=${mounts[i]}
+		as_root umount -R -- "$m" 2>/dev/null ||
+			as_root umount -l -- "$m" 2>/dev/null || true
+	done
 
 	exit $rc
 }
 trap cleanup EXIT
+
+mount_and_track() {
+	local target=$1
+	shift
+	as_root mount "$@" -- "$target" || die "failed to mount $target"
+	mounts+=("$target")
+}
 
 if [[ -x $CHROOT/bin/bash ]]; then
 	chroot_shell=/bin/bash
@@ -46,29 +55,49 @@ if [[ ! -x $CHROOT${chroot_shell} ]]; then
 	die "no usable shell found in CHROOT=$CHROOT"
 fi
 
-"$BIN"/chroot/mount
-mounted=1
+mount_and_track "$CHROOT/proc" -t proc proc
+mount_and_track "$CHROOT/dev" --rbind /dev
+as_root mount --make-rslave "$CHROOT/dev"
+mount_and_track "$CHROOT/sys" --rbind /sys
+as_root mount --make-rslave "$CHROOT/sys"
+
+if [[ ! -e $CHROOT/etc/resolv.conf ]]; then
+	as_root touch "$CHROOT/etc/resolv.conf" || die "unable to create $CHROOT/etc/resolv.conf"
+fi
+mount_and_track "$CHROOT/etc/resolv.conf" --bind /etc/resolv.conf
+as_root mount -o remount,bind,ro "$CHROOT/etc/resolv.conf"
+
+env_args=(
+	PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+	TMPDIR=/tmp
+	SHELL=/bin/sh
+	HOME=/root
+	USER=root
+	LOGNAME=root
+)
+if [[ -n ${TERM-} ]]; then
+	env_args+=(TERM="$TERM")
+fi
+if [[ -n ${LANG-} ]]; then
+	env_args+=(LANG="$LANG")
+else
+	env_args+=(LANG=C)
+fi
+if [[ -n ${LC_ALL-} ]]; then
+	env_args+=(LC_ALL="$LC_ALL")
+fi
 
 if [[ $# -eq 0 ]]; then
 	if [[ $chroot_shell == /bin/bash ]]; then
-		"$BIN"/chroot/run --as-user "$chroot_shell" -il
+		as_root chroot -- "$CHROOT" /usr/bin/env -i "${env_args[@]}" "$chroot_shell" -il
 		exit $?
 	fi
 
-	"$BIN"/chroot/run --as-user "$chroot_shell" -i
+	as_root chroot -- "$CHROOT" /usr/bin/env -i "${env_args[@]}" "$chroot_shell" -i
 	exit $?
 fi
 
-case "$1" in
---)
-	shift
-	[[ $# -gt 0 ]] || die "missing command after --"
-	"$BIN"/chroot/run --as-user "$@"
-	;;
--*)
-	"$BIN"/chroot/run --as-user "$chroot_shell" "$@"
-	;;
-*)
-	"$BIN"/chroot/run --as-user "$@"
-	;;
-esac
+[[ $1 == -- ]] || die "unexpected argument: $1 (usage: shell CHROOT [-- cmd...])"
+shift
+[[ $# -gt 0 ]] || die "missing command after --"
+as_root chroot -- "$CHROOT" /usr/bin/env -i "${env_args[@]}" "$@"
