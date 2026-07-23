@@ -135,6 +135,7 @@ zypper install \
 	cross-ppc64le-gcc15 \
 	cross-s390x-gcc15 \
 	cross-riscv64-gcc15 \
+	debootstrap \
 	fakeroot \
 	python3-argcomplete \
 	python3-requests \
@@ -325,11 +326,27 @@ automatically from `ARCH`; `-D CHROOT:=...` overrides that for a single run.
 build chroot is not, and does not need to be, related to the disk image
 booted at test time.
 
-`bin/setup/debootstrap` is a small helper for Debian rootfs creation:
+`bin/setup/debootstrap` is a small helper for Debian rootfs creation, and
+runs fully unprivileged (no `sudo`):
 
 ```bash
-sudo ./bin/setup/debootstrap -s trixie -a arm64 /roots/debian/trixie/arm64
+./bin/setup/debootstrap -s trixie -a arm64 /roots/debian/trixie/arm64
 ```
+
+Package unpacking (both debootstrap's own first stage and any `apt-get`
+installs done later inside the chroot, including the built-in
+`openssh-server` install and `-e`) runs under `fakeroot`, and the real
+`chroot(2)` calls debootstrap itself needs (second stage, package installs,
+`-e`) run inside an unprivileged, mapped-root user namespace
+(`unshare --map-root-user`) -- see the script's own top-of-file comment for
+exactly why both are needed together. This covers ordinary Debian base packages,
+including ones that ship files owned by a non-root system group (e.g.
+`unix_chkpwd` is `root:shadow`), which need `fakeroot`'s ownership faking,
+not just the namespace's own mapped root id. A package or `-e` command that
+needs to `chown` to some *other* specific non-root id from **inside** the
+chroot (not during ordinary unpacking) is not covered by this and would
+need the same wider, subuid/subgid-delegated mapping described in
+`plans/03-chroot-build-userns.md`'s "Option A", as a follow-up.
 
 `bin/setup/suse-bootstrap` is a small helper for Tumbleweed rootfs creation
 (only for native architecture), and also runs fully unprivileged: it
@@ -387,8 +404,11 @@ For the built-in flows, the expected sudoers allowlist is:
 - `/usr/bin/mount`, `/usr/bin/umount`, `/usr/bin/chroot` (only needed if you
   use `CHROOT_BUILD`)
 
-`bin/setup/suse-bootstrap` no longer uses `sudo` (see above);
-`bin/setup/debootstrap` still does, for now.
+Setup helpers (`bin/setup/*`) do not use `sudo` at all:
+`bin/setup/suse-bootstrap` runs under `fakeroot`, and
+`bin/setup/debootstrap` combines `fakeroot` (package unpacking) with an
+unprivileged, mapped-root user namespace (real `chroot(2)` calls) -- see
+their own top-of-file comments and the paragraphs above for details.
 
 ## Project Layout
 
