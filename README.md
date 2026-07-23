@@ -352,28 +352,27 @@ Runtime privilege escalation is centralized in `bin/run`, which uses `sudo -n`
 (optionally with `--preserve-env=VAR[,VAR...]`, forwarded to sudo's own
 `--preserve-env`). There is no interactive fallback. In practice that covers:
 
-- the `vng` invocation itself (which needs to run as root to manage the
-  qemu process) and a best-effort `pkill` cleanup call in `bin/vng/stop-vm`
 - `mount`/`umount`/`chroot`, only when `CHROOT_BUILD=1` (see `bin/chroot/*`):
   mounting the per-run overlay and bind mounts, and entering the chroot
   itself. The actual build inside the chroot immediately drops back to the
   invoking user's uid/gid (`chroot --userspec=uid:gid`); only the mount and
   `chroot(2)` syscalls themselves run as real root.
 
+The `vng` (virtme-ng) boot itself does not need root: it is invoked directly
+(no `bin/run --as-root`). QEMU usermode networking (`--network user`) needs
+no TUN/TAP device, `--root-disk` boots off a plain virtio-blk disk image
+with no host-side loop-mounting, and the `--rwdir` shares (`BUILD_DIR`,
+`OUTPUT_DIR`) are exported unprivileged over 9p (`-fsdev local`; virtme-ng's
+virtiofs daemon is only set up for its own root-export mode, which
+`--root-disk` bypasses entirely). The same goes for `bin/vng/stop-vm`'s
+cleanup: the tracked process group is owned by the invoking user and
+(empirically confirmed) already includes the real qemu process, so no
+privileged `pkill` is needed either.
+
 For the built-in flows, the expected sudoers allowlist is:
 
-- the `vng` binary under `tools/virtme-ng` (resolve the symlink to its real
-  path for the sudoers entry)
-- `/usr/bin/pkill`
 - `/usr/bin/mount`, `/usr/bin/umount`, `/usr/bin/chroot` (only needed if you
   use `CHROOT_BUILD`)
-
-The `vng` entry needs a `SETENV:` tag (or an equivalent `Defaults
-!env_reset`/`env_keep` override) so that `bin/run --as-root
---preserve-env=PATH,HOME -- vng ...` actually preserves `PATH`/`HOME` under
-sudo: `vng` relies on `PATH` to find its own sibling tools (e.g.
-`virtme/guest/bin`), and on a per-run `HOME` so concurrent boots' SSH host
-key caches never collide. `mount`/`umount`/`chroot` need no such tag.
 
 Some setup helpers also use `sudo`; keep that in mind when preparing a new
 host.
