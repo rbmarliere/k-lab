@@ -28,14 +28,19 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ $# -gt 0 ]] || die "missing command"
-resolve_root || exit 1
-rootfs_overlay_paths || exit 1
+resolve_chroot || exit 1
+chroot_overlay_paths || exit 1
 
-# Make sure this run's private overlay over ROOT exists (idempotent) so
-# standalone callers do not need to mount first.
-"$BIN"/rootfs/mount-overlay
+# Make sure this run's private overlay+mounts over CHROOT exist (idempotent)
+# so standalone callers do not need to mount first.
+"$BIN"/chroot/mount
 
 chroot_args=()
+# A plain PATH (no host toolchain dirs) so the target's own native binaries
+# (its own gcc, make, sh, ...) resolve inside the chroot, transparently
+# emulated for foreign arches by the host's qemu-user/binfmt_misc
+# registration (which pins its interpreter fd at registration time, so it
+# works regardless of what is or is not present inside the chroot).
 env_args=(
 	PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 	TMPDIR=/tmp
@@ -75,15 +80,12 @@ fi
 if [[ -n ${LC_ALL-} ]]; then
 	env_args+=(LC_ALL="$LC_ALL")
 fi
-if [[ -n ${DEBIAN_FRONTEND-} ]]; then
-	env_args+=(DEBIAN_FRONTEND="$DEBIAN_FRONTEND")
-fi
 
 # Keep the environment explicit and run the command via a real host-root
-# chroot so package managers see normal rootfs ownership semantics. Chroot
-# into this run's private merged view of ROOT, never ROOT itself.
-if [[ $(id -u) -eq 0 ]]; then
-	exec chroot "${chroot_args[@]}" "$ROOT_MERGED" /usr/bin/env -i "${env_args[@]}" "$@"
-fi
-
-exec sudo -n -- chroot "${chroot_args[@]}" "$ROOT_MERGED" /usr/bin/env -i "${env_args[@]}" "$@"
+# chroot. Chroot into this run's private merged view of CHROOT, never
+# CHROOT itself. Route through bin/run (like every other privileged call in
+# bin/chroot/*) instead of invoking sudo directly, so the sudoers-failure
+# detection/error message in bin/run also covers this call; bin/run already
+# skips sudo when we are already root.
+exec "$BIN"/run --as-root -- \
+	chroot "${chroot_args[@]}" "$CHROOT_MERGED" /usr/bin/env -i "${env_args[@]}" "$@"

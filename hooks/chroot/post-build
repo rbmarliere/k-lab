@@ -1,0 +1,11 @@
+#!/bin/bash -eu
+
+[[ ${CHROOT_BUILD:-0} == 1 ]] || exit 0
+[[ -n ${CHROOT-} ]] || exit 0
+
+# CHROOT is never booted (unlike ROOT_DISK), so nothing after the BUILD
+# phase needs it mounted: tear it down right away. Best-effort so a
+# teardown race does not mask an otherwise-successful build (the mounts are
+# idempotent and get cleaned up on this TMP_DIR's next run either way).
+"$BIN"/chroot/umount || echo "WARN: failed to unmount CHROOT bind mounts" >&2
+"$BIN"/chroot/umount-overlay || echo "WARN: failed to unmount CHROOT overlay" >&2

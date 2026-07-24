@@ -1,0 +1,74 @@
+#!/bin/bash -eu
+
+die() {
+	echo "ERROR: $*" >&2
+	exit 1
+}
+
+THIS_DIR=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")
+
+# shellcheck disable=SC1091
+source "$THIS_DIR/../env.sh"
+
+resolve_chroot || exit 1
+chroot_overlay_paths || exit 1
+
+mounted=
+cleanup() {
+	local rc=$?
+
+	if [[ -n $mounted ]]; then
+		if ! "$BIN"/chroot/umount; then
+			echo "ERROR: failed to unmount chroot at CHROOT=$CHROOT" >&2
+			if [[ $rc -eq 0 ]]; then
+				rc=1
+			fi
+		fi
+		if ! "$BIN"/chroot/umount-overlay; then
+			echo "ERROR: failed to unmount chroot overlay at CHROOT=$CHROOT" >&2
+			if [[ $rc -eq 0 ]]; then
+				rc=1
+			fi
+		fi
+	fi
+
+	exit $rc
+}
+trap cleanup EXIT
+
+if [[ -x $CHROOT/bin/bash ]]; then
+	chroot_shell=/bin/bash
+else
+	chroot_shell=/bin/sh
+fi
+
+if [[ ! -x $CHROOT${chroot_shell} ]]; then
+	die "no usable shell found in CHROOT=$CHROOT"
+fi
+
+"$BIN"/chroot/mount
+mounted=1
+
+if [[ $# -eq 0 ]]; then
+	if [[ $chroot_shell == /bin/bash ]]; then
+		"$BIN"/chroot/run --as-user "$chroot_shell" -il
+		exit $?
+	fi
+
+	"$BIN"/chroot/run --as-user "$chroot_shell" -i
+	exit $?
+fi
+
+case "$1" in
+--)
+	shift
+	[[ $# -gt 0 ]] || die "missing command after --"
+	"$BIN"/chroot/run --as-user "$@"
+	;;
+-*)
+	"$BIN"/chroot/run --as-user "$chroot_shell" "$@"
+	;;
+*)
+	"$BIN"/chroot/run --as-user "$@"
+	;;
+esac
