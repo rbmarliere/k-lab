@@ -1,5 +1,13 @@
 #!/bin/bash -eu
 
+THIS_DIR=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")
+
+# Source env.sh for the canonical KLAB_ENV_KEYS list. This also recomputes the
+# path vars (BIN/TOOLS_DIR/VNG_DIR), matching what hooks/pre-ktest already did
+# before invoking write-env, so the persisted values are unchanged.
+# shellcheck disable=SC1091
+source "$THIS_DIR/env.sh"
+
 [[ -n ${TMP_DIR-} ]] || {
 	echo "ERROR: TMP_DIR is not set" >&2
 	exit 1
@@ -8,11 +16,7 @@
 env_file=$TMP_DIR/env.sh
 {
 	printf '#!/bin/bash\n'
-	for key in \
-		BIN TOOLS_DIR BUILD_DIR BUILD_OPTIONS ROOT_DISK CHROOT_BUILD CHROOT \
-		ARCH CROSS_COMPILE BUILD_TARGET VNG_DIR VNG_PORT VNG_MEM TMP_DIR OUTPUT_DIR \
-		CC HOSTCC HOSTCFLAGS COMPILE_COMMANDS
-	do
+	for key in "${KLAB_ENV_KEYS[@]}"; do
 		if [[ -n ${!key-} ]]; then
 			printf 'export %s=%q\n' "$key" "${!key}"
 		else
