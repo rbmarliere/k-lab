@@ -170,7 +170,8 @@ resolve_chroot() {
 #   CHROOT_WORK   = overlayfs scratch dir (required, never accessed directly)
 # This keeps CHROOT itself read-only and shared, so concurrent runs against
 # the same CHROOT (e.g. a shared CHROOT_ARM64 in setup.conf) never mount,
-# chroot into, or write to the same path.
+# chroot into, or write to the same path. See chroot_ns_paths below for the
+# namespace holder this is actually mounted through.
 chroot_overlay_paths() {
 	local resolved_tmp_dir
 
@@ -189,4 +190,178 @@ chroot_overlay_paths() {
 
 	export CHROOT_UPPER CHROOT_WORK CHROOT_MERGED
 	return 0
+}
+
+# Paths for the per-TMP_DIR "namespace holder" (see ensure_chroot_ns below)
+# that bin/chroot/* joins instead of using real root.
+#   CHROOT_NS_PIDFILE = pid of the holder process to nsenter into
+#   CHROOT_NS_IDFILE  = holder's user-namespace id, recorded at spawn time
+#                       so a reuse check can tell a live holder from a dead
+#                       one whose pid got recycled (kill -0 alone can't)
+#   CHROOT_NS_READY   = written last, once pidfile+idfile are consistent
+#   CHROOT_NS_LOG     = holder's stdout/stderr, surfaced on failure
+chroot_ns_paths() {
+	local resolved_tmp_dir
+
+	[[ -n ${TMP_DIR-} ]] || env_error "TMP_DIR is not set (required to isolate CHROOT per run)" || return 1
+
+	resolved_tmp_dir=$(realpath -m -- "$TMP_DIR") || {
+		env_error "unable to resolve TMP_DIR: $TMP_DIR"
+		return 1
+	}
+
+	CHROOT_NS_PIDFILE=$resolved_tmp_dir/chroot/ns.pid
+	CHROOT_NS_IDFILE=$resolved_tmp_dir/chroot/ns.id
+	CHROOT_NS_READY=$resolved_tmp_dir/chroot/ns.ready
+	CHROOT_NS_LOG=$resolved_tmp_dir/chroot/ns.log
+
+	export CHROOT_NS_PIDFILE CHROOT_NS_IDFILE CHROOT_NS_READY CHROOT_NS_LOG
+	return 0
+}
+
+# Read-only check: is the per-TMP_DIR namespace holder running, and
+# genuinely the one we spawned? Never spawns one. A bare `kill -0 $pid` is
+# not enough since the pid could have been recycled, so this also compares
+# the target's user-namespace id against the one recorded at spawn time.
+#
+# Every mount bin/chroot/* makes lives inside the holder's private mount
+# namespace, so "no holder" == "nothing mounted" -- bin/chroot/umount and
+# umount-overlay use this to skip entirely instead of spawning one first.
+chroot_ns_alive() {
+	local pid ns_id
+
+	[[ -n ${CHROOT_NS_PIDFILE-} && -f $CHROOT_NS_PIDFILE && -f ${CHROOT_NS_READY-} ]] || return 1
+
+	pid=$(<"$CHROOT_NS_PIDFILE")
+	[[ $pid =~ ^[0-9]+$ ]] || return 1
+	kill -0 -- "$pid" 2>/dev/null || return 1
+
+	ns_id=$(readlink -- "/proc/$pid/ns/user" 2>/dev/null) || return 1
+	[[ -n $ns_id && -f ${CHROOT_NS_IDFILE-} ]] || return 1
+	[[ $ns_id == "$(<"$CHROOT_NS_IDFILE")" ]]
+}
+
+# Ensure a per-TMP_DIR namespace holder is running, spawning one if not.
+# Idempotent: returns immediately if chroot_ns_alive already says yes.
+#
+# The holder is a single, long-lived background process:
+#   setsid unshare --user --pid --mount --map-root-user --fork -- \
+#     bash -c 'while :; do wait -n 2>/dev/null; sleep 0.1; done'
+# `--map-root-user` maps the invoking uid/gid to ns-uid/gid 0 (never real
+# root). `--mount` gives it a private mount namespace, so every mount
+# bin/chroot/mount-overlay and bin/chroot/mount add later is invisible
+# outside it and torn down atomically the instant the holder dies (see
+# kill_chroot_ns), no separate unmount step needed. `--pid` (with `--fork`,
+# required for CLONE_NEWPID to take effect) gives it a private PID
+# namespace, needed for `mount -t proc` inside it to work at all.
+#
+# The holder is pid 1 of that PID namespace, so it must reap anything
+# reparented to it: chroot_nsenter forks a fresh member of the namespace
+# per call, and an interrupted build's orphaned descendants get reparented
+# to the holder. A bare `sleep infinity` never reaps (confirmed: leaves
+# permanent zombies); the `wait -n` loop does. This doesn't change how the
+# holder handles signals (see kill_chroot_ns): SIGTERM is still ignored,
+# exactly like real init.
+#
+# Every separate, later bin/chroot/* invocation joins this one holder via
+# chroot_nsenter instead of creating its own -- a plain `unshare` per
+# invocation would be a disconnected namespace that loses all mount state
+# once that invocation exits.
+#
+# The pid to record is not the holder's own `$$`: `unshare --pid --fork`
+# does not itself join the new pid namespace (CLONE_NEWPID only takes
+# effect for the next forked child), so it's the forked child that becomes
+# pid 1 there, and that child's own getpid() is self-referential ("1") and
+# useless from outside. Instead this resolves it externally: capture the
+# outer `unshare` launcher's pid via `$!`, then `pgrep -P` for its child.
+ensure_chroot_ns() {
+	local launcher pid ns_id i
+	# Bounded, roughly-doubling backoff; spawning the holder is normally
+	# near-instant, this just avoids blocking indefinitely if something
+	# is badly wrong. Fixed table (not computed) to dodge locale-dependent
+	# float formatting breaking `sleep`.
+	local -a backoff=(0.05 0.1 0.2 0.4 0.8 1 1 1 1 1)
+
+	chroot_ns_alive && return 0
+	rm -f -- "$CHROOT_NS_PIDFILE" "$CHROOT_NS_IDFILE" "$CHROOT_NS_READY"
+
+	mkdir -p -- "$(dirname -- "$CHROOT_NS_PIDFILE")"
+	: >"$CHROOT_NS_LOG"
+
+	setsid unshare --user --pid --mount --map-root-user --fork -- \
+		bash -c 'while :; do wait -n 2>/dev/null; sleep 0.1; done' \
+		</dev/null &>"$CHROOT_NS_LOG" &
+	launcher=$!
+	disown
+
+	pid=
+	for i in "${!backoff[@]}"; do
+		pid=$(pgrep -P "$launcher" 2>/dev/null || true)
+		[[ $pid =~ ^[0-9]+$ ]] && break
+		pid=
+		sleep "${backoff[$i]}"
+	done
+
+	if [[ -z $pid ]]; then
+		env_error "namespace holder failed to start (TMP_DIR=$TMP_DIR)"
+		cat -- "$CHROOT_NS_LOG" >&2 2>/dev/null || true
+		return 1
+	fi
+
+	ns_id=$(readlink -- "/proc/$pid/ns/user" 2>/dev/null) || {
+		env_error "namespace holder exited immediately (TMP_DIR=$TMP_DIR)"
+		cat -- "$CHROOT_NS_LOG" >&2 2>/dev/null || true
+		return 1
+	}
+
+	echo "$ns_id" >"$CHROOT_NS_IDFILE"
+	echo "$pid" >"$CHROOT_NS_PIDFILE"
+	touch "$CHROOT_NS_READY"
+	return 0
+}
+
+# Direct replacement for every former `"$BIN"/run --as-root -- ...` call in
+# bin/chroot/*: joins "$@" to the per-TMP_DIR namespace holder's
+# user+mount+pid namespaces (ensure_chroot_ns must already have been called
+# in this process) instead of spawning a new, disconnected one.
+#
+# --preserve-credentials is required: without it, nsenter also tries
+# setgroups() on the target's supplementary groups, which fails under the
+# single-range --map-root-user mapping the holder uses. Not needed anyway:
+# joining the namespace with our own already-mapped credential is enough
+# to be seen as ns-uid/gid 0 there.
+#
+# Mount-table idempotency checks (grep .../proc/mounts) must also go
+# through this: /proc/mounts reflects the reading process's own mount
+# namespace, so a plain, non-nsentered read would miss mounts that only
+# exist inside the holder's private one.
+chroot_nsenter() {
+	[[ -n ${CHROOT_NS_PIDFILE-} && -f $CHROOT_NS_PIDFILE ]] || env_error "namespace holder is not running (call ensure_chroot_ns first)" || return 1
+	nsenter --target "$(<"$CHROOT_NS_PIDFILE")" --user --mount --pid --preserve-credentials -- "$@"
+}
+
+# Tear down the per-TMP_DIR namespace holder: killing it atomically tears
+# down everything mounted inside it (overlay, proc, dev, sys, binds), with
+# no separate unmount step needed or able to race it.
+#
+# Must be SIGKILL, not a plain `kill`/SIGTERM: as pid 1 of its own PID
+# namespace, the holder gets init-like signal semantics and silently
+# ignores anything without a handler; only SIGKILL/SIGSTOP get through.
+kill_chroot_ns() {
+	local pid i ret=0
+
+	[[ -n ${CHROOT_NS_PIDFILE-} && -f $CHROOT_NS_PIDFILE ]] || return 0
+	pid=$(<"$CHROOT_NS_PIDFILE")
+
+	if [[ $pid =~ ^[0-9]+$ ]]; then
+		kill -9 -- "$pid" 2>/dev/null || true
+		for ((i = 0; i < 50; i++)); do
+			kill -0 -- "$pid" 2>/dev/null || break
+			sleep 0.1
+		done
+		kill -0 -- "$pid" 2>/dev/null && ret=1
+	fi
+
+	rm -f -- "$CHROOT_NS_PIDFILE" "$CHROOT_NS_IDFILE" "$CHROOT_NS_READY"
+	return $ret
 }

@@ -30,9 +30,11 @@ done
 [[ $# -gt 0 ]] || die "missing command"
 resolve_chroot || exit 1
 chroot_overlay_paths || exit 1
+chroot_ns_paths || exit 1
 
 # Make sure this run's private overlay+mounts over CHROOT exist (idempotent)
-# so standalone callers do not need to mount first.
+# so standalone callers do not need to mount first. Also guarantees the
+# namespace holder chroot_nsenter joins below is running.
 "$BIN"/chroot/mount
 
 chroot_args=()
@@ -47,11 +49,19 @@ env_args=(
 )
 
 if [[ -n $run_as_user ]]; then
-	uid=$(id -u)
-	gid=$(id -g)
 	user=$(id -un 2>/dev/null || echo user)
 
-	chroot_args+=(--userspec="$uid:$gid")
+	# No --userspec here, unlike the old real-root chroot: coreutils'
+	# chroot unconditionally calls setgroups() whenever --userspec is
+	# given, which fails under the single-range --map-root-user mapping
+	# the namespace holder uses (fixing that needs newuidmap/newgidmap
+	# setuid-root plus subuid/subgid delegation -- "Option A" in
+	# plans/03-chroot-build-userns.md, not set up here). Deliberate,
+	# documented behavior change ("Option B"): ns-uid 0 is never real
+	# root, so anything it does can only touch files the invoking uid
+	# could already touch. The only practical difference is id(1)/
+	# getuid() now reporting 0 under --as-user too, so a build that
+	# branches on `[ "$(id -u)" = 0 ]` may now take that branch.
 	env_args+=(
 		SHELL=/bin/sh
 		HOME=/tmp
@@ -81,11 +91,13 @@ if [[ -n ${LC_ALL-} ]]; then
 	env_args+=(LC_ALL="$LC_ALL")
 fi
 
-# Keep the environment explicit and run the command via a real host-root
-# chroot. Chroot into this run's private merged view of CHROOT, never
-# CHROOT itself. Route through bin/run (like every other privileged call in
-# bin/chroot/*) instead of invoking sudo directly, so the sudoers-failure
-# detection/error message in bin/run also covers this call; bin/run already
-# skips sudo when we are already root.
-exec "$BIN"/run --as-root -- \
-	chroot "${chroot_args[@]}" "$CHROOT_MERGED" /usr/bin/env -i "${env_args[@]}" "$@"
+# Keep the environment explicit and run via a real chroot(2), joined to
+# this run's namespace holder instead of real host root. Chroots into this
+# run's private merged view of CHROOT, never CHROOT itself. chroot_args is
+# currently always empty (see "Option B" above); kept as the place a
+# future "Option A" (--userspec=...) would populate it again.
+#
+# Not `exec`: chroot_nsenter is a shell function, not an executable, but
+# nsenter still execs "$@" as this script's last action either way, so the
+# exit status is the same as `exec` would give.
+chroot_nsenter chroot "${chroot_args[@]}" "$CHROOT_MERGED" /usr/bin/env -i "${env_args[@]}" "$@"

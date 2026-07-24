@@ -8,28 +8,34 @@ source "$THIS_DIR/../env.sh"
 [[ -n ${CHROOT-} ]] || exit 0
 resolve_chroot || exit 1
 chroot_overlay_paths || exit 1
+chroot_ns_paths || exit 1
 
-if ! grep -q " $CHROOT_MERGED " /proc/mounts 2>/dev/null; then
-	exit 0
-fi
+# No namespace holder running means nothing is mounted and nothing to tear
+# down (see chroot_ns_alive in bin/env.sh).
+chroot_ns_alive || exit 0
 
-# Best-effort: clear any leftover mounts under the merged view first (proc,
-# dev, sys, resolv.conf, OUTPUT_DIR, BUILD_DIR) so the overlay itself is not
-# busy. Normally these are already gone by the time this runs; its own
-# retries/lazy-unmount fallback mean it should not leave anything behind,
-# but do not let a failure there block also trying to tear down the overlay.
-"$BIN"/chroot/umount || true
+# Best-effort: clear leftover mounts under the merged view first (proc,
+# resolv.conf, OUTPUT_DIR, BUILD_DIR). /dev and /sys are expected to still
+# be reported (kernel-locked against individual unmount, see
+# bin/chroot/umount) -- silenced here since kill_chroot_ns below removes
+# them unconditionally regardless; run bin/chroot/umount directly instead
+# if that detail matters for debugging.
+"$BIN"/chroot/umount >/dev/null 2>&1 || true
 
-# Same retry + lazy-unmount-as-last-resort as bin/chroot/umount, and for the
-# same reason: BUILD_DIR is bind-mounted (via the overlay's lowerdir=CHROOT
-# plus the binds above) into this view, so a stale overlay mount left behind
-# is not just messy but dangerous under a later "rm -rf" of TMP_DIR.
+# The overlay mount is not subject to the same cross-userns lock (created
+# fresh in this namespace, not propagated in), so a genuine transient EBUSY
+# is worth retrying; same retry + lazy-unmount fallback as bin/chroot/umount.
 for ((attempt = 0; attempt < 5; attempt++)); do
-	"$BIN"/run --as-root umount "$CHROOT_MERGED" 2>/dev/null && exit 0
-	grep -q " $CHROOT_MERGED " /proc/mounts 2>/dev/null || exit 0
+	chroot_nsenter umount "$CHROOT_MERGED" 2>/dev/null && break
+	chroot_nsenter grep -q " $CHROOT_MERGED " /proc/mounts 2>/dev/null || break
 	sleep 0.2
 done
+if chroot_nsenter grep -q " $CHROOT_MERGED " /proc/mounts 2>/dev/null; then
+	echo "WARN: $CHROOT_MERGED still busy after retries, forcing a lazy unmount" >&2
+	chroot_nsenter umount -l "$CHROOT_MERGED" 2>/dev/null || true
+fi
 
-echo "WARN: $CHROOT_MERGED still busy after retries, forcing a lazy unmount" >&2
-"$BIN"/run --as-root umount -l "$CHROOT_MERGED" 2>/dev/null
-! grep -q " $CHROOT_MERGED " /proc/mounts 2>/dev/null
+# Complete the teardown: killing the namespace holder tears down the
+# private user+mount+pid namespace atomically, regardless of whether the
+# umount loop above fully succeeded on its own.
+kill_chroot_ns

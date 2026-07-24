@@ -147,6 +147,11 @@ zypper install \
 	sudo
 ```
 
+`sudo` is only needed for `bin/setup/build-busybox`'s optional, interactive
+`sudo zypper install` (auto-installing a missing cross-compiler/glibc-devel
+package on request) -- nothing else in this repo uses it; see "Privileges"
+below.
+
 If you build for a non-native `ARCH` on the host, the host also needs a usable
 cross toolchain. By default, k-lab derives `CROSS_COMPILE` from `ARCH`;
 `setup.conf` may override that with `CROSS_COMPILE_*`.
@@ -369,33 +374,26 @@ disk image.) Other rootfs-directory options include
 
 ### Privileges
 
-Runtime privilege escalation is centralized in `bin/run`, which uses `sudo -n`
-(optionally with `--preserve-env=VAR[,VAR...]`, forwarded to sudo's own
-`--preserve-env`). There is no interactive fallback. In practice that covers:
+None of k-lab's own runtime or setup flows need real root, `sudo`, or any
+privileged daemon.
 
-- `mount`/`umount`/`chroot`, only when `CHROOT_BUILD=1` (see `bin/chroot/*`):
-  mounting the per-run overlay and bind mounts, and entering the chroot
-  itself. The actual build inside the chroot immediately drops back to the
-  invoking user's uid/gid (`chroot --userspec=uid:gid`); only the mount and
-  `chroot(2)` syscalls themselves run as real root.
+- `vng` (virtme-ng) boots run as the invoking user; QEMU usermode
+  networking and `--root-disk` need no host-side privileges.
+- `bin/setup/suse-bootstrap` and `bin/setup/debootstrap` run under
+  `fakeroot` (see their own top-of-file comments for details).
+- `CHROOT_BUILD=1` (see `bin/chroot/*`) mounts and chroots inside an
+  **unprivileged user namespace** instead of as real root -- the same
+  approach rootless Podman/Buildah/bubblewrap use.
 
-The `vng` (virtme-ng) boot itself does not need root: it is invoked directly
-(no `bin/run --as-root`). QEMU usermode networking (`--network user`) needs
-no TUN/TAP device, and `--root-disk` needs no host-side loop-mounting or
-chowning. `bin/vng/stop-vm` no longer needs a privileged `pkill` fallback
-either: the tracked process group is owned by the invoking user and already
-includes the real qemu process.
+Requirements: unprivileged user namespaces enabled (default on most
+distros; otherwise `sysctl kernel.unprivileged_userns_clone=1`) and a
+reasonably recent `util-linux` (2.42.1 tested). `CHROOT` itself must be
+owned by the invoking user.
 
-For the built-in flows, the expected sudoers allowlist is:
-
-- `/usr/bin/mount`, `/usr/bin/umount`, `/usr/bin/chroot` (only needed if you
-  use `CHROOT_BUILD`)
-
-Setup helpers (`bin/setup/*`) do not use `sudo` at all:
-`bin/setup/suse-bootstrap` runs under `fakeroot`, and
-`bin/setup/debootstrap` combines `fakeroot` (package unpacking) with an
-unprivileged, mapped-root user namespace (real `chroot(2)` calls) -- see
-their own top-of-file comments and the paragraphs above for details.
+One caveat: builds run with `--as-user` see uid/gid `0` inside the chroot
+(this used to be the invoking user's real ids). This is harmless -- it is
+never real root, only ever the invoking uid seen as `0` -- but a build that
+branches on `[ "$(id -u)" = 0 ]` may behave differently than before.
 
 ## Project Layout
 

@@ -29,10 +29,12 @@ TEST_TYPE = build
 
 # boot: also boot ROOT_DISK (the Tumbleweed x86_64 image above by default;
 # override with -D ROOT_DISK:=/path/to/<arch>.img) and confirm the guest is
-# up and matches the expected ARCH.
+# up and matches the expected ARCH. Compares against KLAB_UNAME_ARCH (see
+# include/cross.conf), not ARCH itself: a booted guest's `uname -m` reports
+# its real machine name (e.g. "aarch64"), not k-lab's ARCH name ("arm64").
 TEST_START IF ${TEST} == boot
 TEST_TYPE = test
-TEST_BIN = uname -m | grep -qx ${ARCH} && test -b /dev/vda
+TEST_BIN = uname -m | grep -qx ${KLAB_UNAME_ARCH} && test -b /dev/vda
 TEST = ${DO_TEST_SIMPLE}
 
 # chroot: build inside CHROOT (the Tumbleweed x86_64 rootfs above by
@@ -45,11 +47,12 @@ CHROOT_BUILD = 1
 # chroot-boot: same chrooted build as "chroot", then boot a matching
 # ROOT_DISK (the default above already matches CHROOT's arch/distro; override
 # both together with -D CHROOT:=... -D ROOT_DISK:=... to test another one)
-# and confirm the guest booted off it.
+# and confirm the guest booted off it. See the "boot" case above for why
+# this compares against KLAB_UNAME_ARCH rather than ARCH itself.
 TEST_START IF ${TEST} == chroot-boot
 TEST_TYPE = test
 CHROOT_BUILD = 1
-TEST_BIN = uname -m | grep -qx ${ARCH} && test -b /dev/vda
+TEST_BIN = uname -m | grep -qx ${KLAB_UNAME_ARCH} && test -b /dev/vda
 TEST = ${DO_TEST_SIMPLE}
 
 # bpf: exercises the shared include/selftests-bpf.conf profile end to end
