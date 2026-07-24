@@ -6,19 +6,27 @@
 # CHROOT is never booted (unlike ROOT_DISK), so nothing after the BUILD
 # phase needs it mounted: tear it down right away.
 #
-# Do NOT swallow a failed unmount: OUTPUT_DIR and BUILD_DIR are bind-mounted
-# from the real host paths into this run's merged view, so a mount left
-# behind here is not just messy, it is dangerous -- a later "rm -rf" of
+# bin/chroot/umount-overlay alone is the authoritative full teardown: it
+# already calls bin/chroot/umount itself as a best-effort first step, then
+# unmounts the overlay and kills the namespace holder (see bin/env.sh's
+# kill_chroot_ns), which is what actually and atomically clears every mount
+# inside it, including /dev and /sys. Calling bin/chroot/umount standalone
+# here (as this hook used to) would misreport an always-expected outcome as
+# a fatal failure: the kernel unconditionally protects any mount
+# recursively rbind-propagated into this namespace from a different (host)
+# user namespace -- i.e. every /dev/* and /sys/* entry -- against being
+# individually unmounted from inside this namespace, so bin/chroot/umount
+# alone can never fully succeed on its own here no matter how it is called
+# (see bin/chroot/umount's own comment for the confirmed kernel mechanism).
+#
+# Do NOT swallow a real failure, though: OUTPUT_DIR and BUILD_DIR are
+# bind-mounted from the real host paths into this run's merged view, so a
+# mount genuinely left behind (only possible if killing the holder itself
+# somehow failed) is dangerous, not just messy -- a later "rm -rf" of
 # TMP_DIR would recurse straight through the stale bind and delete the real
-# source tree. bin/chroot/umount(-overlay) already retry and fall back to a
-# lazy unmount internally, so a failure here means even that could not fully
-# detach the mountpoints; that is worth stopping the run over
-# (POST_BUILD_DIE=1), not hiding behind a WARN.
-ret=0
-"$BIN"/chroot/umount || ret=1
-"$BIN"/chroot/umount-overlay || ret=1
-
-if [[ $ret -ne 0 ]]; then
-	echo "ERROR: failed to fully unmount CHROOT=$CHROOT (TMP_DIR=${TMP_DIR-}); refusing to leave stale mounts behind -- do not rm -rf TMP_DIR until this is resolved" >&2
+# source tree. That is worth stopping the run over (POST_BUILD_DIE=1), not
+# hiding behind a WARN.
+if ! "$BIN"/chroot/umount-overlay; then
+	echo "ERROR: failed to fully tear down CHROOT=$CHROOT (TMP_DIR=${TMP_DIR-}); refusing to leave stale mounts behind -- do not rm -rf TMP_DIR until this is resolved" >&2
+	exit 1
 fi
-exit $ret

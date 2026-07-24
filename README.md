@@ -147,6 +147,11 @@ zypper install \
 	sudo
 ```
 
+`sudo` is only needed for `bin/setup/build-busybox`'s optional, interactive
+`sudo zypper install` (auto-installing a missing cross-compiler/glibc-devel
+package on request) -- nothing else in this repo uses it; see "Privileges"
+below.
+
 If you build for a non-native `ARCH` on the host, the host also needs a usable
 cross toolchain. By default, k-lab derives `CROSS_COMPILE` from `ARCH`;
 `setup.conf` may override that with `CROSS_COMPILE_*`.
@@ -378,37 +383,97 @@ disk image.) Other rootfs-directory options include
 
 ### Privileges
 
-Runtime privilege escalation is centralized in `bin/run`, which uses `sudo -n`
-(optionally with `--preserve-env=VAR[,VAR...]`, forwarded to sudo's own
-`--preserve-env`). There is no interactive fallback. In practice that covers:
+None of k-lab's own runtime or setup flows need real root, `sudo`, or any
+privileged daemon. `bin/run` is a plain env-establishing wrapper around
+`"$@"` (it re-sources the k-lab environment before running hooks/commands
+invoked by ktest.pl); it has no privilege-escalation mode of its own
+anymore.
 
-- `mount`/`umount`/`chroot`, only when `CHROOT_BUILD=1` (see `bin/chroot/*`):
-  mounting the per-run overlay and bind mounts, and entering the chroot
-  itself. The actual build inside the chroot immediately drops back to the
-  invoking user's uid/gid (`chroot --userspec=uid:gid`); only the mount and
-  `chroot(2)` syscalls themselves run as real root.
+- The `vng` (virtme-ng) boot itself does not need root: it is invoked
+  directly. QEMU usermode networking (`--network user`) needs no TUN/TAP
+  device, `--root-disk` boots off a plain virtio-blk disk image with no
+  host-side loop-mounting, and the `--rwdir` shares (`BUILD_DIR`,
+  `OUTPUT_DIR`) are exported unprivileged over 9p (`-fsdev local`;
+  virtme-ng's virtiofs daemon is only set up for its own root-export mode,
+  which `--root-disk` bypasses entirely). The same goes for
+  `bin/vng/stop-vm`'s cleanup: the tracked process group is owned by the
+  invoking user and (empirically confirmed) already includes the real
+  qemu process, so no privileged `pkill` is needed either.
+- `bin/setup/suse-bootstrap` runs under `fakeroot`, and
+  `bin/setup/debootstrap` combines `fakeroot` (package unpacking) with an
+  unprivileged, mapped-root user namespace (real `chroot(2)` calls) -- see
+  their own top-of-file comments and the paragraphs above for details.
+- `CHROOT_BUILD=1` (see `bin/chroot/*`): mounting the per-run overlay and
+  bind mounts, and entering the chroot itself, all run inside an
+  **unprivileged user namespace** instead of as real root -- the same
+  mechanism rootless Podman/Buildah/bubblewrap use. A single background
+  "namespace holder" process
+  (`setsid unshare --user --pid --mount --map-root-user --fork --
+  bash -c 'while :; do wait -n 2>/dev/null; sleep 0.1; done'`, which maps
+  the invoking uid/gid to ns-uid/gid 0 -- never real root, so nothing it
+  creates can ever end up genuinely root-owned by accident) is spawned per
+  `TMP_DIR` and kept alive for the life of the run, tracked under
+  `$TMP_DIR/chroot/ns.*` the same way `bin/vng/start-vm` tracks `vng.pid`.
+  The holder is pid 1 of its own PID namespace, so it is also responsible
+  for reaping anything reparented to it (e.g. if a build is interrupted
+  mid-tree from outside); the `wait -n` loop does that (a bare `sleep
+  infinity` does not). Every separate `bin/chroot/mount-overlay`/`mount`/
+  `run`/`umount`/`umount-overlay` invocation joins that same holder's
+  namespaces via `nsenter` instead of creating its own -- a plain
+  `unshare` per invocation would create a new, disconnected namespace each
+  time and lose all mount state the instant that invocation exits.
+  Tearing the whole thing down (`bin/chroot/umount-overlay`) simply kills
+  the holder: this atomically unmounts everything inside it (overlay,
+  proc, dev, sys, binds) with no lazy-unmount retries or races possible,
+  since nothing outside that namespace could ever see or race against
+  those mounts in the first place -- a structural improvement over needing
+  real root to individually unmount each one.
 
-The `vng` (virtme-ng) boot itself does not need root: it is invoked directly
-(no `bin/run --as-root`). QEMU usermode networking (`--network user`) needs
-no TUN/TAP device, `--root-disk` boots off a plain virtio-blk disk image
-with no host-side loop-mounting, and the `--rwdir` shares (`BUILD_DIR`,
-`OUTPUT_DIR`) are exported unprivileged over 9p (`-fsdev local`; virtme-ng's
-virtiofs daemon is only set up for its own root-export mode, which
-`--root-disk` bypasses entirely). The same goes for `bin/vng/stop-vm`'s
-cleanup: the tracked process group is owned by the invoking user and
-(empirically confirmed) already includes the real qemu process, so no
-privileged `pkill` is needed either.
+  `bin/chroot/run --as-user` (used by every real build, via `bin/chroot/
+  make`) no longer passes `chroot --userspec=uid:gid`: coreutils' `chroot`
+  unconditionally calls `setgroups()` whenever `--userspec` is given at
+  all, which fails under the simple single-range `--map-root-user` mapping
+  used here. Fixing that needs `newuidmap`/`newgidmap` to be setuid-root
+  plus `/etc/subuid`/`/etc/subgid` delegation for the k-lab user (the usual
+  rootless-container mechanism, e.g. `usermod --add-subuids 100000-165535
+  --add-subgids 100000-165535 $USER`) -- a viable future enhancement (see
+  "Option A" in `plans/03-chroot-build-userns.md`), not currently set up.
+  In its absence, `id`/`getuid()` inside the chroot now report `0` even
+  under `--as-user` (previously the invoking user's real, non-zero
+  uid/gid); only `HOME`, `USER`, and `LOGNAME` still differ from the
+  non-`--as-user` case. This is a deliberate, documented behavior change,
+  not a regression: the safety property `--userspec` used to provide --
+  never actually letting the build touch anything as real root -- is
+  already structurally satisfied regardless of what `id(1)` reports inside
+  the chroot, since ns-uid 0 here is never real root, it is the same real,
+  unprivileged host uid the whole time, so anything it does can only ever
+  touch files that uid could already touch, inside the ephemeral per-run
+  overlay. The only practical effect is a build or `make install`-style
+  target that branches on `[ "$(id -u)" = 0 ]` (rare for a plain kernel
+  `make`, but real for some install targets) now taking that branch under
+  `--as-user` where it previously would not have.
 
-For the built-in flows, the expected sudoers allowlist is:
+  Prerequisites: unprivileged user namespaces, enabled by default on any
+  current Linux distribution (if
+  `/proc/sys/kernel/unprivileged_userns_clone` exists and reads `0`, a
+  one-time real-root `sysctl kernel.unprivileged_userns_clone=1` is
+  needed; not expected on a stock openSUSE Tumbleweed host); a
+  `util-linux` new enough for `unshare --map-root-user --pid --fork` and
+  `nsenter --preserve-credentials --target` (validated with 2.42.1). Also
+  needed: `CHROOT`'s own files must be owned by the invoking user (as
+  `bin/setup/suse-bootstrap`/`bin/setup/debootstrap` above already
+  produce) -- unlike real root, an unprivileged, single-range-mapped
+  namespace cannot create new files/directories inside a part of `CHROOT`
+  owned by some other uid (e.g. a rootfs unpacked by a *different* real
+  root elsewhere and copied in as-is); `chown -R` it to yourself once if
+  you hit a `Permission denied` creating `etc/resolv.conf` or similar.
 
-- `/usr/bin/mount`, `/usr/bin/umount`, `/usr/bin/chroot` (only needed if you
-  use `CHROOT_BUILD`)
-
-Setup helpers (`bin/setup/*`) do not use `sudo` at all:
-`bin/setup/suse-bootstrap` runs under `fakeroot`, and
-`bin/setup/debootstrap` combines `fakeroot` (package unpacking) with an
-unprivileged, mapped-root user namespace (real `chroot(2)` calls) -- see
-their own top-of-file comments and the paragraphs above for details.
+`sudo` remains an optional dependency for exactly one, unrelated,
+non-runtime case: `bin/setup/build-busybox` calls plain (interactive,
+not `-n`) `sudo zypper install` to conveniently auto-install a missing
+cross-compiler/glibc-devel package on request; nothing else in this repo
+uses `sudo`, and no sudoers configuration is required for that one-shot,
+interactive use.
 
 ## Project Layout
 

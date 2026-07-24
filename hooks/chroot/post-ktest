@@ -6,19 +6,22 @@
 # Safety net: ktest.pl skips POST_BUILD_CHAIN when the build fails before
 # reaching the actual build phase (e.g. a failed oldconfig), so
 # hooks/chroot/post-build's teardown never runs in that case. POST_KTEST
-# still runs on any outcome, and bin/chroot/umount(-overlay) are idempotent
-# (no-op if hooks/chroot/post-build already cleaned up), so this is safe to
-# always run here too.
+# still runs on any outcome, and bin/chroot/umount-overlay is idempotent
+# (a no-op, via chroot_ns_alive in bin/env.sh, if hooks/chroot/post-build
+# already cleaned up), so this is safe to always run here too.
 #
-# Do NOT swallow a failed unmount here either (see hooks/chroot/post-build
-# for why: OUTPUT_DIR/BUILD_DIR bind mounts left stale under TMP_DIR are
+# bin/chroot/umount-overlay alone is the authoritative full teardown (see
+# hooks/chroot/post-build for the full explanation of why calling
+# bin/chroot/umount standalone, as this hook used to, is not correct here:
+# /dev and /sys mounts are unconditionally, permanently protected by the
+# kernel against being individually unmounted from inside this namespace,
+# so it can never fully succeed on its own).
+#
+# Do NOT swallow a real failure here either (see hooks/chroot/post-build for
+# why: OUTPUT_DIR/BUILD_DIR bind mounts left stale under TMP_DIR are
 # dangerous, not just messy). This is the last chance to catch it, so make
 # it loud even though nothing declares POST_KTEST_DIE.
-ret=0
-"$BIN"/chroot/umount || ret=1
-"$BIN"/chroot/umount-overlay || ret=1
-
-if [[ $ret -ne 0 ]]; then
-	echo "ERROR: failed to fully unmount CHROOT=$CHROOT (TMP_DIR=${TMP_DIR-}); refusing to leave stale mounts behind -- do not rm -rf TMP_DIR until this is resolved" >&2
+if ! "$BIN"/chroot/umount-overlay; then
+	echo "ERROR: failed to fully tear down CHROOT=$CHROOT (TMP_DIR=${TMP_DIR-}); refusing to leave stale mounts behind -- do not rm -rf TMP_DIR until this is resolved" >&2
+	exit 1
 fi
-exit $ret

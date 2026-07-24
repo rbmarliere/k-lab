@@ -30,9 +30,12 @@ done
 [[ $# -gt 0 ]] || die "missing command"
 resolve_chroot || exit 1
 chroot_overlay_paths || exit 1
+chroot_ns_paths || exit 1
 
 # Make sure this run's private overlay+mounts over CHROOT exist (idempotent)
-# so standalone callers do not need to mount first.
+# so standalone callers do not need to mount first. This also guarantees the
+# namespace holder chroot_nsenter below joins is running (bin/chroot/mount
+# calls ensure_chroot_ns itself).
 "$BIN"/chroot/mount
 
 chroot_args=()
@@ -47,11 +50,29 @@ env_args=(
 )
 
 if [[ -n $run_as_user ]]; then
-	uid=$(id -u)
-	gid=$(id -g)
 	user=$(id -un 2>/dev/null || echo user)
 
-	chroot_args+=(--userspec="$uid:$gid")
+	# No --userspec here, unlike the old real-root chroot: coreutils'
+	# chroot unconditionally calls setgroups() whenever --userspec is
+	# given at all, even for a same-uid case, which fails ("Operation not
+	# permitted") under the simple single-range --map-root-user mapping
+	# the namespace holder uses -- fixing that needs newuidmap/newgidmap
+	# to be setuid-root plus admin-provisioned /etc/subuid and /etc/subgid
+	# delegation for the k-lab user ("Option A" in
+	# plans/03-chroot-build-userns.md), neither of which can be assumed
+	# present, and neither of which this repo currently sets up. This is
+	# a deliberate, documented behavior change ("Option B" in that plan),
+	# not an oversight: the safety property --userspec used to provide
+	# (never let the build run "as root" inside the chroot) is already
+	# structurally satisfied regardless of what id(1) reports in there --
+	# ns-uid 0 is never real root, it is the same real, unprivileged host
+	# uid the whole time (see ensure_chroot_ns/chroot_nsenter in
+	# bin/env.sh), so anything it does can only ever touch files that uid
+	# could already touch, inside the ephemeral per-run overlay. The only
+	# actual difference is cosmetic: id(1)/getuid() now report 0 inside
+	# the chroot even with --as-user, so a build or `make install`-style
+	# target that branches on `[ "$(id -u)" = 0 ]` would now take that
+	# branch where it previously would not have.
 	env_args+=(
 		SHELL=/bin/sh
 		HOME=/tmp
@@ -81,11 +102,18 @@ if [[ -n ${LC_ALL-} ]]; then
 	env_args+=(LC_ALL="$LC_ALL")
 fi
 
-# Keep the environment explicit and run the command via a real host-root
-# chroot. Chroot into this run's private merged view of CHROOT, never
-# CHROOT itself. Route through bin/run (like every other privileged call in
-# bin/chroot/*) instead of invoking sudo directly, so the sudoers-failure
-# detection/error message in bin/run also covers this call; bin/run already
-# skips sudo when we are already root.
-exec "$BIN"/run --as-root -- \
-	chroot "${chroot_args[@]}" "$CHROOT_MERGED" /usr/bin/env -i "${env_args[@]}" "$@"
+# Keep the environment explicit and run the command via a real chroot(2),
+# joined to this run's namespace holder instead of real host root (see
+# ensure_chroot_ns/chroot_nsenter in bin/env.sh). Chroot into this run's
+# private merged view of CHROOT, never CHROOT itself. chroot_args is
+# currently always empty under "Option B" above; kept as the natural place
+# a future "Option A" (--userspec=...) would populate it again.
+#
+# Not `exec`: chroot_nsenter is a shell function (it needs to be callable
+# multiple times in a row from bin/chroot/mount-overlay, bin/chroot/mount,
+# etc.), and `exec` only works on a real executable, not a shell function.
+# It still ends up running nsenter as this script's last action either way
+# (nsenter itself execs "$@" internally once it has joined the holder's
+# namespaces), and its exit status becomes this script's own exit status,
+# same as `exec` would have given.
+chroot_nsenter chroot "${chroot_args[@]}" "$CHROOT_MERGED" /usr/bin/env -i "${env_args[@]}" "$@"
