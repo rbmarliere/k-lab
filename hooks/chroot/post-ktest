@@ -9,5 +9,16 @@
 # still runs on any outcome, and bin/chroot/umount(-overlay) are idempotent
 # (no-op if hooks/chroot/post-build already cleaned up), so this is safe to
 # always run here too.
-"$BIN"/chroot/umount || echo "WARN: failed to unmount CHROOT bind mounts" >&2
-"$BIN"/chroot/umount-overlay || echo "WARN: failed to unmount CHROOT overlay" >&2
+#
+# Do NOT swallow a failed unmount here either (see hooks/chroot/post-build
+# for why: OUTPUT_DIR/BUILD_DIR bind mounts left stale under TMP_DIR are
+# dangerous, not just messy). This is the last chance to catch it, so make
+# it loud even though nothing declares POST_KTEST_DIE.
+ret=0
+"$BIN"/chroot/umount || ret=1
+"$BIN"/chroot/umount-overlay || ret=1
+
+if [[ $ret -ne 0 ]]; then
+	echo "ERROR: failed to fully unmount CHROOT=$CHROOT (TMP_DIR=${TMP_DIR-}); refusing to leave stale mounts behind -- do not rm -rf TMP_DIR until this is resolved" >&2
+fi
+exit $ret

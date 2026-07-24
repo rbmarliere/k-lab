@@ -9,22 +9,42 @@ source "$THIS_DIR/../env.sh"
 resolve_chroot || exit 1
 chroot_overlay_paths || exit 1
 
-# unmount mountpoints under this run's merged chroot, deepest first. This
-# never touches CHROOT_MERGED itself (the overlay), only what was
+# unmount mountpoints under this run's merged chroot, deepest first (a
+# descending sort of the paths always visits a child before its own parent).
+# This never touches CHROOT_MERGED itself (the overlay), only what was
 # bind-mounted into it (proc, dev, sys, resolv.conf, OUTPUT_DIR, BUILD_DIR);
 # the overlay is torn down separately by bin/chroot/umount-overlay.
+#
+# A mount left behind here is not just messy: OUTPUT_DIR and BUILD_DIR are
+# bind-mounted from the real host paths into this view, so a later "rm -rf"
+# of TMP_DIR that still has these mounted would recurse straight through the
+# bind and delete the real source tree. So a transient EBUSY (e.g. a just-
+# exited chrooted process not fully reaped yet) is retried a few times, and
+# as a last resort this falls back to a lazy unmount, which detaches the
+# mountpoint from the namespace immediately (safe against a later "rm -rf")
+# even if the underlying resource stays busy a little longer in the
+# background.
+unmount_one() {
+	local m=$1
+	local attempt
+
+	for ((attempt = 0; attempt < 5; attempt++)); do
+		if "$BIN"/run --as-root umount "$m" 2>/dev/null; then
+			return 0
+		fi
+		# ignore races where the target is already gone.
+		grep -q " $m " /proc/mounts 2>/dev/null || return 0
+		sleep 0.2
+	done
+
+	echo "WARN: $m still busy after retries, forcing a lazy unmount" >&2
+	"$BIN"/run --as-root umount -l "$m" 2>/dev/null
+	! grep -q " $m " /proc/mounts 2>/dev/null
+}
+
 ret=0
 while read -r m; do
-	if "$BIN"/run --as-root umount "$m"; then
-		continue
-	fi
-
-	# ignore races where the target is already gone (e.g. "not mounted").
-	if ! grep -q " $m " /proc/mounts 2>/dev/null; then
-		continue
-	fi
-
-	ret=1
+	unmount_one "$m" || ret=1
 done < <(
 	grep " $CHROOT_MERGED/" /proc/mounts | awk '{print $2}' | sort -r
 )

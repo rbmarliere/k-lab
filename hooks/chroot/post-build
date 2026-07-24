@@ -4,8 +4,21 @@
 [[ -n ${CHROOT-} ]] || exit 0
 
 # CHROOT is never booted (unlike ROOT_DISK), so nothing after the BUILD
-# phase needs it mounted: tear it down right away. Best-effort so a
-# teardown race does not mask an otherwise-successful build (the mounts are
-# idempotent and get cleaned up on this TMP_DIR's next run either way).
-"$BIN"/chroot/umount || echo "WARN: failed to unmount CHROOT bind mounts" >&2
-"$BIN"/chroot/umount-overlay || echo "WARN: failed to unmount CHROOT overlay" >&2
+# phase needs it mounted: tear it down right away.
+#
+# Do NOT swallow a failed unmount: OUTPUT_DIR and BUILD_DIR are bind-mounted
+# from the real host paths into this run's merged view, so a mount left
+# behind here is not just messy, it is dangerous -- a later "rm -rf" of
+# TMP_DIR would recurse straight through the stale bind and delete the real
+# source tree. bin/chroot/umount(-overlay) already retry and fall back to a
+# lazy unmount internally, so a failure here means even that could not fully
+# detach the mountpoints; that is worth stopping the run over
+# (POST_BUILD_DIE=1), not hiding behind a WARN.
+ret=0
+"$BIN"/chroot/umount || ret=1
+"$BIN"/chroot/umount-overlay || ret=1
+
+if [[ $ret -ne 0 ]]; then
+	echo "ERROR: failed to fully unmount CHROOT=$CHROOT (TMP_DIR=${TMP_DIR-}); refusing to leave stale mounts behind -- do not rm -rf TMP_DIR until this is resolved" >&2
+fi
+exit $ret
