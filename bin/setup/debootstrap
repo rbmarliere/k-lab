@@ -1,5 +1,22 @@
 #!/bin/bash -eu
 
+# Runs fully unprivileged via two mechanisms, one per privilege need (see
+# plans/02-setup-scripts-fakeroot-unshare.md):
+#
+#  - Package unpacking (first stage and any later apt-get installs) chowns
+#    files to arbitrary system group ids (e.g. Debian's unix_chkpwd ships
+#    root:shadow), not just uid/gid 0. A mapped-root user namespace only
+#    maps a single id, so chown() to any other id fails with EINVAL, which
+#    fakeroot does not swallow (it only swallows a normal EPERM). So
+#    unpacking runs under `fakeroot` directly, like suse-bootstrap.
+#  - The real chroot(2) (second stage, apt-get install, -e) needs
+#    CAP_SYS_CHROOT, which fakeroot cannot fake. That runs inside a
+#    mapped-root user namespace instead (run_chroot() below).
+#
+# debootstrap's first stage never chroots; second stage does, but only
+# when split via --foreign/--second-stage. So this script always uses
+# --foreign and runs the second stage itself, even for native arch, to
+# keep the two privilege mechanisms separated.
 HOST_ARCH=
 SUITE=sid
 ROOT=
@@ -28,10 +45,6 @@ die() {
 	echo "ERROR: $*" >&2
 	exit 1
 }
-
-if [[ $(id -u) -gt 0 ]]; then
-	die "need uid=0"
-fi
 
 need_cmd() {
 	command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"
@@ -103,43 +116,45 @@ ensure_target_root() {
 	mkdir -p -- "$ROOT"
 }
 
+# Unprivileged real chroot(2) via a mapped-root user namespace (see the
+# top-of-file comment). A fresh namespace per call is fine: unlike
+# bin/chroot/*'s persistent overlay, there is no state worth keeping alive
+# across these one-shot calls.
+run_chroot() {
+	unshare --user --pid --mount --map-root-user --fork -- chroot "$@"
+}
+
 run_second_stage() {
-	if ! chroot "$ROOT" /bin/sh -c 'true' >/dev/null 2>&1; then
-		die "foreign second stage requires binfmt_misc plus qemu-user support on the host"
+	if ! run_chroot "$ROOT" /bin/sh -c 'true' >/dev/null 2>&1; then
+		die "second stage requires a working chroot (for a foreign target: binfmt_misc plus qemu-user support on the host)"
 	fi
 
-	chroot "$ROOT" /debootstrap/debootstrap --second-stage
+	run_chroot "$ROOT" /debootstrap/debootstrap --second-stage
 }
 
 run_debootstrap() {
 	local deb_arch=$1
-	local -a args=(--arch "$deb_arch")
-
-	if [[ $ARCH != "$HOST_ARCH" ]]; then
-		args+=(--foreign)
-	fi
+	local -a args=(--arch "$deb_arch" --foreign)
 
 	args+=("$SUITE" "$ROOT")
 	if [[ -n $MIRROR ]]; then
 		args+=("$MIRROR")
 	fi
 
-	"$DEBOOTSTRAP" "${args[@]}"
-
-	if [[ $ARCH != "$HOST_ARCH" ]]; then
-		run_second_stage
-	fi
+	# --foreign: only unpack here, no chroot (see top-of-file comment).
+	fakeroot -- "$DEBOOTSTRAP" "${args[@]}"
+	run_second_stage
 }
 
 install_guest_packages() {
-	chroot "$ROOT" /bin/sh -lc \
+	run_chroot "$ROOT" /bin/sh -lc \
 		'yes | DEBIAN_FRONTEND=noninteractive apt-get install -yqq --allow-unauthenticated openssh-server'
 }
 
 run_extra_command() {
 	[[ -n $EXEC ]] || return 0
 
-	chroot "$ROOT" /bin/bash -ilc "$EXEC"
+	run_chroot "$ROOT" /bin/bash -ilc "$EXEC"
 }
 
 write_resolv_conf() {
@@ -189,6 +204,8 @@ fi
 need_cmd realpath
 need_cmd chroot
 need_cmd tee
+need_cmd fakeroot
+need_cmd unshare
 
 DEBOOTSTRAP=$(command -v debootstrap || true)
 [[ -n $DEBOOTSTRAP ]] || die "missing required command: debootstrap"

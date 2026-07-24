@@ -135,6 +135,7 @@ zypper install \
 	cross-ppc64le-gcc15 \
 	cross-s390x-gcc15 \
 	cross-riscv64-gcc15 \
+	debootstrap \
 	fakeroot \
 	python3-argcomplete \
 	python3-requests \
@@ -326,11 +327,20 @@ automatically from `ARCH`; `-D CHROOT:=...` overrides that for a single run.
 build chroot is not, and does not need to be, related to the disk image
 booted at test time.
 
-`bin/setup/debootstrap` is a small helper for Debian rootfs creation:
+`bin/setup/debootstrap` is a small helper for Debian rootfs creation, and
+runs fully unprivileged (no `sudo`):
 
 ```bash
-sudo ./bin/setup/debootstrap -s trixie -a arm64 /roots/debian/trixie/arm64
+./bin/setup/debootstrap -s trixie -a arm64 /roots/debian/trixie/arm64
 ```
+
+Package unpacking (first stage and any later `apt-get` installs) runs
+under `fakeroot`, while the real `chroot(2)` calls (second stage, package
+installs, `-e`) run inside an unprivileged, mapped-root user namespace
+(`unshare --map-root-user`) -- see the script's top-of-file comment for why
+both are needed. Known gap: a package or `-e` command that needs to
+`chown` to some *other* specific non-root id from inside the chroot is not
+covered.
 
 `bin/setup/suse-bootstrap` is a small helper for Tumbleweed rootfs creation
 (only for native architecture), and also runs fully unprivileged: it
@@ -381,8 +391,11 @@ For the built-in flows, the expected sudoers allowlist is:
 - `/usr/bin/mount`, `/usr/bin/umount`, `/usr/bin/chroot` (only needed if you
   use `CHROOT_BUILD`)
 
-`bin/setup/suse-bootstrap` no longer uses `sudo` (see above);
-`bin/setup/debootstrap` still does, for now.
+Setup helpers (`bin/setup/*`) do not use `sudo` at all:
+`bin/setup/suse-bootstrap` runs under `fakeroot`, and
+`bin/setup/debootstrap` combines `fakeroot` (package unpacking) with an
+unprivileged, mapped-root user namespace (real `chroot(2)` calls) -- see
+their own top-of-file comments and the paragraphs above for details.
 
 ## Project Layout
 
