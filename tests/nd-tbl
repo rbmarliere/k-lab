@@ -1,7 +1,7 @@
 INCLUDE ../include/defaults.conf
 
 DEFAULTS OVERRIDE
-DEPS = scapy
+# Needs: scapy
 POST_BUILD_APPEND = rsync -a --delete ${LINUX_GIT}/../bugs/ipv6_disable/ ${OUTPUT_DIR}/bug/
 VNG_ARGS = --user root -a "ipv6.disable=1"
 BUILD_TYPE = defconfig

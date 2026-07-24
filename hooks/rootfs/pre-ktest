@@ -1,5 +1,10 @@
 #!/bin/bash -eu
 
-[[ -n ${ROOT-} ]] || exit 0
+[[ -n ${ROOT_DISK-} ]] || exit 0
+[[ -d $ROOT_DISK ]] || exit 0
 
-"$BIN"/cross preflight-root "$ROOT" "${ARCH-}"
+"$BIN"/cross preflight-root "$ROOT_DISK" "${ARCH-}"
+
+# Create this run's private overlay over ROOT_DISK now, before PRE_BUILD/POST_BUILD
+# (which may write into it, e.g. modules_install) and before any vng boot.
+"$BIN"/rootfs/mount-overlay

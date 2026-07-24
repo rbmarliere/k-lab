@@ -143,20 +143,17 @@ _kt_normalize_root_value() {
 
 _kt_preflight_root() {
 	local root=$1
-	local arch=${2-}
 
 	[[ -n $root ]] || return 0
 
-	if [[ ! -d $root ]]; then
-		echo "ERROR: ROOT is not a directory: $root" >&2
+	if [[ ! -f $root ]]; then
+		echo "ERROR: ROOT_DISK must be a disk image file (passed to virtme-ng's --root-disk): $root" >&2
 		return 1
 	fi
-	if [[ ! -r $root || ! -w $root || ! -x $root ]]; then
-		echo "ERROR: ROOT must be readable, writable, and searchable by $(id -un): $root" >&2
+	if [[ ! -r $root ]]; then
+		echo "ERROR: ROOT_DISK must be readable by $(id -un): $root" >&2
 		return 1
 	fi
-
-	"$THIS_DIR"/bin/cross preflight-root "$root" "$arch" || return 1
 }
 
 _kt_confirm() {
@@ -222,7 +219,7 @@ _kt_kargs_override() {
 }
 
 # Derive a stable per-test id from the resolved config path plus any
-# ROOT/ARCH/TEST overrides (these affect file composition, so different
+# ROOT_DISK/ARCH overrides (these affect file composition, so different
 # combinations must not share a TMP_DIR). Deterministic: reruns of the same
 # test with the same overrides reuse the same id.
 _kt_compute_klab_id() {
@@ -230,7 +227,7 @@ _kt_compute_klab_id() {
 	shift
 	local root arch hash sub name
 
-	root=$(_kt_kargs_override ROOT "$@")
+	root=$(_kt_kargs_override ROOT_DISK "$@")
 	arch=$(_kt_kargs_override ARCH "$@")
 
 	hash=$(printf '%s' "$file_path|$root|$arch" | sha256sum | cut -c1-8)
@@ -281,7 +278,7 @@ kt() {
 			COMPILE_COMMANDS=* | COMPILE_COMMANDS:=*)
 				compile_commands_set=1
 				;;
-			ROOT=* | ARCH=* | VNG_PORT=*)
+			ROOT_DISK=* | ARCH=* | VNG_PORT=*)
 				echo "ERROR: use -D ${OPTARG%%=*}:=${OPTARG#*=} for file-scoped overrides" >&2
 				return 2
 				;;
@@ -368,14 +365,14 @@ kt() {
 
 	local root arch
 	local summary_parts=()
-	root=$(_kt_normalize_root_value "$(printf '%s\n' "$dry_run_output" | _kt_dry_run_value ROOT)")
+	root=$(_kt_normalize_root_value "$(printf '%s\n' "$dry_run_output" | _kt_dry_run_value ROOT_DISK)")
 	arch=$(printf '%s\n' "$dry_run_output" | _kt_dry_run_value ARCH)
 	if [[ -n $root ]]; then
-		_kt_preflight_root "$root" "$arch" || return 1
+		_kt_preflight_root "$root" || return 1
 	fi
 
 	if [[ -n $root ]]; then
-		summary_parts+=("ROOT=$root")
+		summary_parts+=("ROOT_DISK=$root")
 		if [[ -n $arch ]]; then
 			summary_parts+=("ARCH=$arch")
 		fi

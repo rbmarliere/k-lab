@@ -57,7 +57,7 @@ generate_min_config() {
 			vng_args=(--arch "$("$BIN"/cross vng-arch "$arch")")
 		fi
 
-		"$BIN"/vng/cmd "${vng_args[@]}" --kconfig --dry-run --configitem MODULES=y | grep -v DRM |
+		"$BIN"/vng/exec "${vng_args[@]}" --kconfig --dry-run --configitem MODULES=y | grep -v DRM |
 			awk '/^CONFIG_[A-Za-z0-9_]+=/' >>"$tmp_output"
 	done < <(collect_arches "$@")
 

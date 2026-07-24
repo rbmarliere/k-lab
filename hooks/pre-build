@@ -1,12 +1,1 @@
 #!/bin/bash -eu
-
-if [[ -n ${DEPS-} ]]; then
-	install_args=()
-	if [[ ${AUTO_INSTALL_DEPS:-1} == 1 ]]; then
-		install_args+=(--auto)
-	fi
-
-	# DEPS is a whitespace-separated list of abstract packages, defined by a test
-	# shellcheck disable=SC2086
-	"$BIN"/install "${install_args[@]}" $DEPS
-fi

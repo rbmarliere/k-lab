@@ -1,5 +1,128 @@
 #!/bin/bash -eu
 
+THIS_DIR=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")
+
+# shellcheck disable=SC1091
+source "$THIS_DIR/../env.sh"
+
+VNG_ROOT_DISK="${1:?usage: cmd \$ROOT_DISK [vng-args...] [-- cmd...]}"
+shift
+
+vng_root_disk_arg=$VNG_ROOT_DISK
+VNG_ROOT_DISK=$(realpath "$VNG_ROOT_DISK")
+if [[ ! -f $VNG_ROOT_DISK ]]; then
+	echo "$VNG_ROOT_DISK: no such file" >&2
+	exit 1
+fi
+
+vng_arg_arch() {
+	local i arg
+
+	for ((i = 0; i < ${#pre_args[@]}; i++)); do
+		arg=${pre_args[$i]}
+		case "$arg" in
+		--arch=*)
+			printf '%s\n' "${arg#--arch=}"
+			return 0
+			;;
+		--arch)
+			if ((i + 1 < ${#pre_args[@]})); then
+				printf '%s\n' "${pre_args[$((i + 1))]}"
+				return 0
+			fi
+			;;
+		esac
+	done
+
+	return 1
+}
+
+# Split the caller's remaining args at the first literal "--": everything
+# before it are vng flags, everything after (if anything) is the command
+# the caller wants to run.
+pre_args=()
+post_args=()
+have_dashdash=
+for arg in "$@"; do
+	if [[ -z $have_dashdash && $arg == "--" ]]; then
+		have_dashdash=1
+		continue
+	fi
+	if [[ -n $have_dashdash ]]; then
+		post_args+=("$arg")
+	else
+		pre_args+=("$arg")
+	fi
+done
+
+requested_arch=${ARCH-}
+if [[ -z $requested_arch ]]; then
+	requested_arch=$(vng_arg_arch || true)
+fi
+
+# Falls back to inferring the arch from the disk image's filename (e.g.
+# aarch64.img -> arm64) when neither ARCH nor a forwarded --arch was given.
+resolved_arch=$("$BIN"/cross resolve-arch "$VNG_ROOT_DISK" "$requested_arch")
+"$BIN"/cross preflight-vng "$VNG_ROOT_DISK" "$resolved_arch"
+
+arch_args=(
+	--busybox "$("$BIN"/cross busybox-path "$resolved_arch")"
+)
+if "$BIN"/cross is-foreign "$resolved_arch"; then
+	cross_compile=$("$BIN"/cross cross-compile "$resolved_arch")
+	arch_args+=(--arch "$("$BIN"/cross vng-arch "$resolved_arch")")
+	if [[ -n $cross_compile ]]; then
+		arch_args+=(--cross-compile "$cross_compile")
+	fi
+fi
+
+vng_port=${VNG_PORT:-$((22000 + RANDOM % 1001))}
+if [[ -n ${TMP_DIR-} ]]; then
+	ssh_helper="$TMP_DIR/vng.ssh"
+else
+	ssh_helper="ssh-$(tr '/' '-' <<<"$vng_root_disk_arg" | sed 's/^-//')"
+fi
+vng_home=$(mktemp -d)
+mkdir -p "$vng_home/.cache/virtme-ng/.ssh/etc/ssh"
+mkdir -p "$vng_home/.cache/virtme-ng/guest"
+export HOME="$vng_home"
+trap 'rm -rf -- "$vng_home"; rm -f -- "$ssh_helper"' EXIT
+
 export PATH="$VNG_DIR:$VNG_DIR/virtme/guest/bin:$PATH"
 
-exec vng "$@"
+# Reconnect/exec-into-guest helper: the boot itself always runs as real root
+# (via bin/run --as-root, since the qemu process needs it), so any later SSH
+# connection must too, to agree on the same $HOME-derived SSH cache/identity
+# files (see virtme_ng.utils.CACHE_DIR) -- sudo's "always_set_home" means a
+# root-owned boot and a non-root client would otherwise resolve to two
+# different (and mismatched) cache directories. Forward "$@" as-is (rather
+# than collapsing to a single --remote-cmd string) so vng's own quoting
+# (shlex.join) handles multi-word/pre-quoted commands correctly.
+{
+	printf '#!/bin/bash -eu\n'
+	printf 'HOME=%q %q --as-root --preserve-env=PATH,HOME -- %q --root-disk %q --user root --ssh-tcp --ssh-client %q -- "$@"\n' \
+		"$HOME" "$BIN/run" "$VNG_DIR/vng" "$VNG_ROOT_DISK" "$vng_port"
+} >"$ssh_helper"
+chmod +x "$ssh_helper"
+
+set \
+	-- \
+	--root-disk "$VNG_ROOT_DISK" \
+	--rw \
+	--user root \
+	--verbose \
+	--network user \
+	--no-virtme-ng-init \
+	--ssh-tcp \
+	--ssh "$vng_port" \
+	--memory "${VNG_MEM:-8G}" \
+	--disable-microvm \
+	"${arch_args[@]}" \
+	"${pre_args[@]}"
+
+if [[ -n $have_dashdash ]]; then
+	set -- "$@" -- "${post_args[@]}"
+fi
+
+set -x
+"$BIN"/run --as-root --preserve-env=PATH,HOME -- "$VNG_DIR/vng" "$@"

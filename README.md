@@ -4,8 +4,8 @@
 test loops with `virtme-ng`.
 
 It keeps `ktest.pl` as the control plane, uses `virtme-ng` as the VM backend,
-and can also run builds and tests against an external root filesystem instead
-of the host.
+and can also boot an external disk image instead of sharing the host
+filesystem.
 
 This repo gives you:
 
@@ -52,45 +52,43 @@ Bootstrap:
 Examples:
 
 ```bash
-# run the default build config and refresh compile_commands.json
+# run the default build config and refresh compile_commands.json (build
+# only, no boot, so no ROOT_DISK is needed)
 kt
 
-# run the minimal vng test config
-kt vng
+# run the minimal vng test config, booting a disk image
+kt -D ROOT_DISK:=/roots/suse/Tumbleweed/x86_64.img vng
 
 # build and run all net selftests
-kt -D TEST:=all selftests/net
+kt -D ROOT_DISK:=/roots/suse/Tumbleweed/x86_64.img -D TEST:=all selftests/net
 
 # don't clean the current $OUTPUT_DIR, but force a defconfig
 kt -C -D BUILD_TYPE=defconfig
 
 # specify target and host compiler overrides and ssh port to use
-kt -D CC:=gcc-13 -D VNG_PORT:=22001 vng
+kt -D ROOT_DISK:=/roots/suse/Tumbleweed/x86_64.img -D CC:=gcc-13 -D VNG_PORT:=22001 vng
 
-# build with CROSS_COMPILE_RISCV (auto-detect arch from rootfs)
-# run the tests within ROOT
-kt -D ROOT:=/roots/debian/trixie/riscv64 selftests/net
-
-# build with the rootfs compiler (binfmt_misc)
-kt -D ROOT:=/roots/debian/sid/arm64 -D BUILD_IN_ROOT:=1
+# boot a foreign-arch disk image; ARCH is inferred from its filename
+# (aarch64.img/arm64.img -> arm64, s390x.img -> s390, ppc64le.img -> powerpc)
+kt -D ROOT_DISK:=/roots/suse/Tumbleweed/aarch64.img vng
 
 # build a tumbleweed kernel
-kt -D ROOT:=/roots/tumbleweed -D TEST:=suse-only -D BRANCH:=stable
+kt -D ROOT_DISK:=/roots/suse/Tumbleweed/x86_64.img -D TEST:=suse-only -D BRANCH:=stable
 
 # also refresh compile_commands.json after the build
-kt -D COMPILE_COMMANDS:=1 vng
+kt -D ROOT_DISK:=/roots/suse/Tumbleweed/x86_64.img -D COMPILE_COMMANDS:=1 vng
 ```
 
 Wrapper options:
 
 - `-C` sets `BUILD_NOCLEAN=1`
 - `-D name=value` passes a normal `ktest.pl` override
-- `-D name:=value` overrides a file-scoped parse-time variable such as `ROOT`,
+- `-D name:=value` overrides a file-scoped parse-time variable such as `ROOT_DISK`,
   `ARCH`, `VNG_PORT`, or `TEST`
 - `-n` prints the resolved config and exits
 
 Before a real run, `kt` does its own `ktest.pl --dry-run`, preflights resolved
-`ROOT` values, asks before reusing a `TMP_DIR` that already contains `kt.log`,
+`ROOT_DISK` values, asks before reusing a `TMP_DIR` that already contains `kt.log`,
 and creates `TMP_DIR.lock` so two runs do not reuse the same output directory.
 
 Run artifacts live under `tmp/$VNG_PORT`. The kernel tree also gets convenience
@@ -128,10 +126,9 @@ If you build for a non-native `ARCH` on the host, the host also needs a usable
 cross toolchain. By default, k-lab derives `CROSS_COMPILE` from `ARCH`;
 `setup.conf` may override that with `CROSS_COMPILE_*`.
 
-`DEPS` adds test-specific packages on top of the built-in base tool list.
-Package names go through the distro-specific maps under `pkg/` when a mapping
-exists. Missing packages are auto-installed by default; set `AUTO_INSTALL_DEPS
-= 0` if you want missing packages to stay a hard failure.
+k-lab does not check or install packages into `ROOT_DISK`: the disk image is
+assumed to already be fully set up with whatever a test needs before you
+point `ROOT_DISK` at it.
 
 ## Writing Tests
 
@@ -157,7 +154,7 @@ TEST = ${DO_TEST_SIMPLE}
 Use `:=` only for parse-time values that affect file composition or derived
 paths:
 
-- `ROOT`
+- `ROOT_DISK`
 - `ARCH`
 - `VNG_PORT`
 - `TEST`
@@ -171,7 +168,6 @@ Use `=` for normal runtime options such as:
 - `CC`
 - `HOSTCC`
 - `HOSTCFLAGS`
-- `DEPS`
 - `VNG_MEM`
 - `VNG_ARGS`
 - `BUILD_IN_ROOT`
@@ -206,31 +202,24 @@ clears `ADD_CONFIG`. To use them, define `VERSION`, `PATCHLEVEL`, and `BRANCH`
 in the test file. The matching SUSE pre-ktest hook writes the minimal config
 fragment for the selected product version.
 
-## Root Filesystems and Privileges
+## Disk Images and Privileges
 
-Set `ROOT := /path/to/rootfs` to run against an external root filesystem
-instead of the host.
+Set `ROOT_DISK := /path/to/disk.img` to boot that disk image via virtme-ng's
+`--root-disk` instead of sharing the host filesystem. `ROOT_DISK` must be a
+regular file (a raw or qcow2-style image with an ext4 filesystem inside).
 
-By default, builds still happen on the host. Set `BUILD_IN_ROOT = 1` if you
-want the kernel build to happen inside the rootfs instead.
-
-For foreign-arch roots:
-
-- host-side builds use the resolved `ARCH` plus a host cross toolchain
-- host-side execution inside the rootfs still needs `binfmt_misc` plus QEMU
-  user-mode support
+If `ARCH` is not set explicitly (and no `--arch` is forwarded via
+`VNG_ARGS`), it is inferred from `ROOT_DISK`'s filename: `aarch64.img`/`arm64.img`
+-> `arm64`, `s390x.img` -> `s390`, `ppc64le.img`/`ppc64.img` -> `powerpc`,
+etc. `ROOT_DISK` may be left unset (the default, `0`) for build-only tests that
+never boot a VM; any test that actually boots always requires it.
 
 VM boots always use a matching static busybox build. Build it first, for
 example `./bin/setup/build-busybox x86_64` or
 `./bin/setup/build-busybox arm64`.
 
-`bin/rootfs/shell` is a convenience wrapper around the same mount and `chroot`
-path used by normal rootfs-backed runs:
-
-```bash
-ROOT=/roots/debian/trixie/x86_64 ./bin/rootfs/shell
-ROOT=/roots/debian/trixie/x86_64 ./bin/rootfs/shell -- uname -a
-```
+k-lab does not check or install packages into `ROOT_DISK`; provision the image
+with whatever a test needs ahead of time.
 
 `bin/setup/debootstrap` is a small helper for Debian rootfs creation:
 
@@ -251,19 +240,26 @@ Other options include vng's own `--root` for Ubuntu cloud images,
 [alpine-make-rootfs](https://github.com/alpinelinux/alpine-make-rootfs),
 [mkosi](https://github.com/systemd/mkosi), etc.
 
-Runtime privilege escalation is centralized in `bin/run`, which uses `sudo -n`.
-There is no interactive fallback. In practice that covers package installation
-plus the rootfs mount, umount, and `chroot` helpers. For the current
-`virtme-ng` path, `ROOT` should therefore point at a rootfs tree owned by the
-calling uid, not just a directory that happens to be readable and writable.
+Runtime privilege escalation is centralized in `bin/run`, which uses `sudo -n`
+(optionally with `--preserve-env=VAR[,VAR...]`, forwarded to sudo's own
+`--preserve-env`). There is no interactive fallback. In practice that covers
+the rootfs mount/umount/chroot helpers (used by `BUILD_IN_ROOT`) and the
+`vng` invocation itself.
 
 For the built-in flows, the expected sudoers allowlist is:
 
 - `/usr/bin/chroot`
 - `/usr/bin/mount`
 - `/usr/bin/umount`
-- `/usr/bin/apt-get` on Debian hosts (untested)
-- `/usr/bin/zypper` on Tumbleweed systems
+- the `vng` binary under `tools/virtme-ng` (resolve the symlink to its real
+  path for the sudoers entry)
+
+The `vng` entry needs a `SETENV:` tag (or an equivalent `Defaults
+!env_reset`/`env_keep` override) so that `bin/run --as-root
+--preserve-env=PATH,HOME -- vng ...` actually preserves `PATH`/`HOME` under
+sudo: `vng` relies on `PATH` to find its own sibling tools (e.g.
+`virtme/guest/bin`), and on a per-run `HOME` so concurrent boots' SSH host
+key caches never collide.
 
 Some setup helpers also use `sudo`; keep that in mind when preparing a new
 host.
@@ -276,5 +272,4 @@ host.
 - `bin/`: runtime helpers used by generated `ktest.pl` commands
 - `bin/setup/`: setup-time helpers
 - `config/`: extra kernel config fragments
-- `pkg/`: distro-specific package name maps
 - `tools/`: repo-local tool state

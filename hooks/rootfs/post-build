@@ -1,23 +1,10 @@
 #!/bin/bash -eu
 
-[[ -n ${ROOT-} ]] || exit 0
+[[ -n ${ROOT_DISK-} ]] || exit 0
+[[ -d $ROOT_DISK ]] || exit 0
 
-if [[ ${BUILD_IN_ROOT:-0} == 1 ]]; then
-	"$BIN"/rootfs/make modules_install
-else
-	kernelrelease=$("$BIN"/make -s kernelrelease)
-	modlib="$ROOT/lib/modules/$kernelrelease"
-
-	# https://build.opensuse.org/projects/openSUSE:Factory/packages/kmod/files/README.usrmerge
-	if [[ -L $ROOT/lib ]]; then
-		case $(readlink -- "$ROOT/lib") in
-		usr/lib | /usr/lib)
-			modlib="$ROOT/usr/lib/modules/$kernelrelease"
-			;;
-		esac
-	elif [[ -d $ROOT/usr/lib/modules && ! -e $ROOT/lib/modules ]]; then
-		modlib="$ROOT/usr/lib/modules/$kernelrelease"
-	fi
-
-	"$BIN"/make DEPMOD=true INSTALL_MOD_PATH="$ROOT" MODLIB="$modlib" modules_install
-fi
+# ROOT_DISK is root-owned; install modules via a real root chroot into this run's
+# private overlay view (see bin/rootfs/run), never into ROOT_DISK itself. This
+# also means the usrmerge /lib -> /usr/lib symlink (if any) is resolved
+# naturally by the real install, with no manual detection needed.
+"$BIN"/rootfs/make DEPMOD=true modules_install
