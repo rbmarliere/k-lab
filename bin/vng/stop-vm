@@ -14,20 +14,6 @@ wait_for_group_exit() {
 	return 1
 }
 
-wait_for_pattern_exit() {
-	local pattern=$1
-	local i
-
-	for ((i = 0; i < 50; i++)); do
-		if ! pgrep -f -- "$pattern" >/dev/null 2>&1; then
-			return 0
-		fi
-		sleep 0.1
-	done
-
-	return 1
-}
-
 KILL_CONSOLE=
 while getopts "f" opt; do
 	case "$opt" in
@@ -50,28 +36,6 @@ if [[ -f $FPID ]]; then
 	kill -- "-${pid}" || echo "ERROR: vng not running" >&2
 	wait_for_group_exit "$pid" || true
 	rm -f "$FPID"
-fi
-
-# The group kill above only reaches "$BIN"/vng/cmd, bin/run, and sudo itself:
-# sudo puts the actual (now root-owned) vng/qemu process in its own session,
-# decoupled from the "setsid vng/cmd" group vng.pid tracks, so it survives
-# as an orphan otherwise. Fall back to a marker-based kill on the root disk:
-# start-vm passes it to vng/cmd, so it ends up in the real qemu process argv.
-#
-# This must NOT be a bare "$TMP_DIR/" pattern: this script is itself called
-# from hooks/vng/pre-ktest, which ktest.pl invokes as
-# `sh -c 'eval "$command"' sh "$command"`, where "$command" is the *entire*
-# resolved PRE_KTEST chain string (containing "TMP_DIR=$TMP_DIR" several
-# times over, once per hook). That ancestor sh process stays alive for the
-# whole chain, so a bare "$TMP_DIR/" pattern matches it too -- pkill would
-# then kill the very process still running the rest of the chain (including
-# this script), aborting everything after it right here, silently.
-if [[ -n ${ROOT_DISK-} && -f ${ROOT_DISK-} ]]; then
-	pattern=$(realpath "$ROOT_DISK")
-	if pgrep -f -- "$pattern" >/dev/null 2>&1; then
-		"$BIN"/run --as-root pkill -f -- "$pattern" || true
-		wait_for_pattern_exit "$pattern" || echo "WARN: vng still running (ROOT_DISK $pattern)" >&2
-	fi
 fi
 
 exit 0

@@ -90,18 +90,13 @@ trap 'rm -rf -- "$vng_home"; rm -f -- "$ssh_helper"' EXIT
 
 export PATH="$VNG_DIR:$VNG_DIR/virtme/guest/bin:$PATH"
 
-# Reconnect/exec-into-guest helper: the boot itself always runs as real root
-# (via bin/run --as-root, since the qemu process needs it), so any later SSH
-# connection must too, to agree on the same $HOME-derived SSH cache/identity
-# files (see virtme_ng.utils.CACHE_DIR) -- sudo's "always_set_home" means a
-# root-owned boot and a non-root client would otherwise resolve to two
-# different (and mismatched) cache directories. Forward "$@" as-is (rather
-# than collapsing to a single --remote-cmd string) so vng's own quoting
-# (shlex.join) handles multi-word/pre-quoted commands correctly.
+# Reconnect/exec-into-guest helper: reuses the same $HOME as the boot so
+# both resolve the same SSH cache dir (virtme_ng.utils.CACHE_DIR). Forward
+# "$@" as-is so vng's own quoting (shlex.join) handles it correctly.
 {
 	printf '#!/bin/bash -eu\n'
-	printf 'HOME=%q %q --as-root --preserve-env=PATH,HOME -- %q --root-disk %q --user root --ssh-tcp --ssh-client %q -- "$@"\n' \
-		"$HOME" "$BIN/run" "$VNG_DIR/vng" "$VNG_ROOT_DISK" "$vng_port"
+	printf 'HOME=%q %q --root-disk %q --user root --ssh-tcp --ssh-client %q -- "$@"\n' \
+		"$HOME" "$VNG_DIR/vng" "$VNG_ROOT_DISK" "$vng_port"
 } >"$ssh_helper"
 chmod +x "$ssh_helper"
 
@@ -125,4 +120,4 @@ if [[ -n $have_dashdash ]]; then
 fi
 
 set -x
-"$BIN"/run --as-root --preserve-env=PATH,HOME -- "$VNG_DIR/vng" "$@"
+"$VNG_DIR/vng" "$@"
