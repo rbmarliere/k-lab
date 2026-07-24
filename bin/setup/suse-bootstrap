@@ -1,11 +1,34 @@
 #!/bin/bash -eu
 
+# Bootstrap a native-architecture Tumbleweed rootfs under $ROOT (default
+# /roots/tumbleweed) using zypper's own --root path-prefixing (never a real
+# chroot, so native arch only).
+#
+# Runs fully unprivileged: re-execs itself under `fakeroot` (one shared
+# session for the whole run) so RPM payload extraction can chown()/mknod()
+# as it expects. Caveat: files that appear root-owned in the result are
+# only fake-owned inside that session -- on disk they belong to the
+# invoking user, which is fine for use as a k-lab CHROOT but matters if
+# shipped somewhere expecting real root-owned files (use `fakeroot -s/-i
+# <statefile>`, or a final real-root chown -R, at packaging time).
+#
+# Env vars:
+#   ROOT   target rootfs directory (default /roots/tumbleweed)
+#   EXTRA  extra packages to install, space-separated
+#
+# Extra zypper repos may be piped in on stdin (one "URL alias" pair per
+# line); otherwise the default openSUSE OSS repo is used.
+
+if [[ -z ${FAKEROOTKEY-} ]]; then
+	command -v fakeroot >/dev/null 2>&1 || {
+		echo "ERROR: fakeroot is required (zypper install fakeroot)" >&2
+		exit 1
+	}
+	exec fakeroot -- "$0" "$@"
+fi
+
 ROOT=${ROOT:-/roots/tumbleweed}
 
-if [[ $(id -u) -gt 0 ]]; then
-	echo "ERROR: need uid=0"
-	exit 1
-fi
 if [[ -e $ROOT ]]; then
 	echo "ERROR: file exists ($ROOT)"
 	exit 1
@@ -25,7 +48,7 @@ write_zypper_helper() {
 	cat >"$ROOT/zypper" <<EOF
 #!/bin/bash
 ROOT=\$(dirname -- "\$(realpath -- "\${BASH_SOURCE[0]}")")
-sudo zypper --non-interactive --root "\$ROOT" "\$@"
+fakeroot -- zypper --non-interactive --root "\$ROOT" "\$@"
 EOF
 	chmod +x "$ROOT/zypper"
 }

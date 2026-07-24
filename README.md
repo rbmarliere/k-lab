@@ -135,6 +135,7 @@ zypper install \
 	cross-ppc64le-gcc15 \
 	cross-s390x-gcc15 \
 	cross-riscv64-gcc15 \
+	fakeroot \
 	python3-argcomplete \
 	python3-requests \
 	qemu-arm \
@@ -332,12 +333,21 @@ sudo ./bin/setup/debootstrap -s trixie -a arm64 /roots/debian/trixie/arm64
 ```
 
 `bin/setup/suse-bootstrap` is a small helper for Tumbleweed rootfs creation
-(only for native architecture):
+(only for native architecture), and also runs fully unprivileged: it
+re-execs itself under `fakeroot` (so RPM payload extraction can `chown`/
+`mknod` as it expects) instead of needing real root.
 
 ```bash
-sudo env ROOT=/roots/tumbleweed ./bin/setup/suse-bootstrap
-sudo env ROOT=/roots/tumbleweed EXTRA="libstdc++6" ./bin/setup/suse-bootstrap < /tmp/custom-sles-repos
+env ROOT=/roots/tumbleweed ./bin/setup/suse-bootstrap
+env ROOT=/roots/tumbleweed EXTRA="libstdc++6" ./bin/setup/suse-bootstrap < /tmp/custom-sles-repos
 ```
+
+Files that appear "root-owned" inside the resulting rootfs are only
+fake-owned within that `fakeroot` session -- on disk they belong to the
+invoking user (fine for use as a k-lab `CHROOT`; if shipping the rootfs
+somewhere that expects real root-owned files, use `fakeroot -s`/`-i
+<statefile>` or a final real-root `chown -R root:root` pass instead). The
+generated `$ROOT/zypper` helper uses `fakeroot` too, for the same reason.
 
 (These two helpers use their own `ROOT` env var for their own target path,
 unrelated to k-lab's `ROOT_DISK`/`CHROOT`. Their output is a directory,
@@ -371,8 +381,8 @@ For the built-in flows, the expected sudoers allowlist is:
 - `/usr/bin/mount`, `/usr/bin/umount`, `/usr/bin/chroot` (only needed if you
   use `CHROOT_BUILD`)
 
-Some setup helpers also use `sudo`; keep that in mind when preparing a new
-host.
+`bin/setup/suse-bootstrap` no longer uses `sudo` (see above);
+`bin/setup/debootstrap` still does, for now.
 
 ## Project Layout
 
