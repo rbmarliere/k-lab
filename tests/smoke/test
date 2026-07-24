@@ -1,0 +1,58 @@
+# Smoke test for the k-lab framework itself: exercises the base build path,
+# booting a disk image, building inside a CHROOT via CHROOT_BUILD=1, and the
+# shared include/selftests-bpf.conf profile, each as a separate TEST value so
+# they can be run independently.
+#
+# CHROOT is a parse-time (":=") variable, so like ROOT_DISK/ARCH it must be
+# set here, before INCLUDE, never inside a TEST_START (see README.md).
+# Defaults to the shared Tumbleweed x86_64 rootfs; override per run with
+# -D CHROOT:=/some/other/rootfs.
+CHROOT := /roots/suse/Tumbleweed/x86_64
+
+INCLUDE ../../include/defaults.conf
+
+DEFAULTS IF NOT DEFINED TEST
+TEST := build
+
+DEFAULTS IF ${TEST} == bpf
+INCLUDE ../../include/selftests-bpf.conf
+DEFAULTS
+
+DEFAULTS OVERRIDE
+BUILD_TYPE = defconfig
+
+# build: plain host build, no VM boot, no chroot -- the fastest sanity check
+# that the k-lab -> ktest.pl -> make plumbing works. No overrides needed.
+TEST_START IF ${TEST} == build
+TEST_TYPE = build
+
+# boot: also boot ROOT_DISK and confirm the guest is up and matches the
+# expected ARCH. Needs: -D ROOT_DISK:=/path/to/<arch>.img
+TEST_START IF ${TEST} == boot
+TEST_TYPE = test
+TEST_BIN = uname -m | grep -qx ${ARCH} && test -b /dev/vda
+TEST = ${DO_TEST_SIMPLE}
+
+# chroot: build inside CHROOT (the Tumbleweed x86_64 rootfs above by
+# default) via CHROOT_BUILD=1, using CHROOT's own native toolchain (see
+# include/cross.conf, bin/chroot/*) instead of the host's. No boot.
+TEST_START IF ${TEST} == chroot
+TEST_TYPE = build
+CHROOT_BUILD = 1
+
+# chroot-boot: same chrooted build as "chroot", then boot a matching
+# ROOT_DISK and confirm the guest booted off it. Needs:
+# -D ROOT_DISK:=/path/to/x86_64.img (matching CHROOT's arch/distro)
+TEST_START IF ${TEST} == chroot-boot
+TEST_TYPE = test
+CHROOT_BUILD = 1
+TEST_BIN = uname -m | grep -qx ${ARCH} && test -b /dev/vda
+TEST = ${DO_TEST_SIMPLE}
+
+# bpf: exercises the shared include/selftests-bpf.conf profile end to end
+# (build+install the "bpf" kselftest collection, boot, run one self-contained
+# subtest). Needs: -D ROOT_DISK:=/path/to/<arch>.img
+TEST_START IF ${TEST} == bpf
+TEST_TYPE = test
+TEST_BIN = ./test_progs -vv -t btf
+TEST = ${DO_TEST_SIMPLE}
