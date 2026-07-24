@@ -10,62 +10,19 @@ if [[ -n ${TMP_DIR-} ]] && [[ -r $TMP_DIR/env.sh ]]; then
 	source "$TMP_DIR/env.sh"
 fi
 
-is_sudo_failure() {
-	local stderr_file=$1
-
-	grep -Eq '^(sudo:|Sorry, user )' "$stderr_file"
-}
-
-run_as_root=
-preserve_env=
-while [[ $# -gt 0 ]]; do
-	case "$1" in
-	--as-root)
-		run_as_root=1
-		shift
-		;;
-	--preserve-env=*)
-		preserve_env=${1#--preserve-env=}
-		shift
-		;;
-	--)
-		shift
-		break
-		;;
-	*)
-		break
-		;;
-	esac
-done
-
+# Plain env-establishing wrapper: re-sources the k-lab environment (above)
+# before running "$@", which is what every ktest.pl-invoked hook and
+# command needs, since ktest.pl otherwise runs them with only its own
+# SETENV environment. No privilege escalation happens here (or anywhere
+# else in this repo) any more -- this used to also support a `--as-root`
+# mode that ran "$@" under `sudo`, needed by bin/chroot/*; that was its
+# last caller, and it now runs unprivileged builds inside an unprivileged
+# user namespace instead (see ensure_chroot_ns/chroot_nsenter in
+# bin/env.sh, and plans/03-chroot-build-userns.md), so `--as-root` was
+# removed entirely rather than left as unreachable dead code.
 if [[ $# -eq 0 ]]; then
 	echo "ERROR: missing command" >&2
 	exit 1
 fi
 
-if [[ -n $run_as_root ]]; then
-	if [[ $(id -u) -eq 0 ]]; then
-		exec "$@"
-	fi
-
-	sudo_args=(-n)
-	if [[ -n $preserve_env ]]; then
-		sudo_args+=("--preserve-env=$preserve_env")
-	fi
-
-	stderr_file=$(mktemp)
-	rc=0
-	sudo "${sudo_args[@]}" -- "$@" 2> >(tee "$stderr_file" >&2) || rc=$?
-	if [[ $rc -ne 0 ]]; then
-		if is_sudo_failure "$stderr_file"; then
-			echo "ERROR: privileged host command failed: $1" >&2
-			echo "ERROR: check passwordless sudo and sudoers for that binary" >&2
-		fi
-		rm -f -- "$stderr_file"
-		exit $rc
-	fi
-	rm -f -- "$stderr_file"
-	exit 0
-else
-	exec "$@"
-fi
+exec "$@"

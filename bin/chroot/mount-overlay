@@ -7,15 +7,19 @@ source "$THIS_DIR/../env.sh"
 
 resolve_chroot || exit 1
 chroot_overlay_paths || exit 1
+chroot_ns_paths || exit 1
+ensure_chroot_ns || exit 1
 
 # Idempotent: a build may call this many times (mount, run, run, ...), but
-# the overlay only needs to be mounted once per TMP_DIR.
-if grep -q " $CHROOT_MERGED " /proc/mounts; then
+# the overlay only needs to be mounted once per TMP_DIR. Checked inside the
+# namespace holder's own private mount table (see chroot_nsenter in
+# bin/env.sh): a plain host-side /proc/mounts read would never see it.
+if chroot_nsenter grep -q " $CHROOT_MERGED " /proc/mounts; then
 	exit 0
 fi
 
 mkdir -p "$CHROOT_UPPER" "$CHROOT_WORK" "$CHROOT_MERGED"
 
-"$BIN"/run --as-root mount -t overlay overlay \
+chroot_nsenter mount -t overlay overlay \
 	-o "lowerdir=$CHROOT,upperdir=$CHROOT_UPPER,workdir=$CHROOT_WORK" \
 	"$CHROOT_MERGED"

@@ -402,6 +402,46 @@ suse_arch() {
 	esac
 }
 
+# What a booted guest's own `uname -m` actually reports, as opposed to
+# normalize_arch's kernel-source-tree-style name (arch/arm64/, arch/s390/,
+# ...) that ARCH/CHROOT_* use everywhere else. These genuinely differ for
+# every arch except x86_64 -- e.g. arch/arm64/ boots and reports "aarch64",
+# never "arm64" -- so anything that checks a *running* guest's own identity
+# (like tests/smoke/test's boot/chroot-boot TEST_BIN) needs this mapping,
+# not normalize_arch's name, or the check can never pass for a foreign arch
+# (confirmed empirically: this was silently broken for every arch but
+# x86_64 until a real foreign-arch boot was actually exercised end to end).
+uname_arch() {
+	local arch
+
+	arch=$(normalize_arch "$1")
+	case "$arch" in
+	x86_64)
+		printf '%s\n' x86_64
+		;;
+	arm64)
+		printf '%s\n' aarch64
+		;;
+	arm)
+		# Best-effort: 32-bit ARM's uname -m varies by CPU/ABI (armv6l,
+		# armv7l, ...); armv7l is the common modern default.
+		printf '%s\n' armv7l
+		;;
+	powerpc)
+		printf '%s\n' ppc64le
+		;;
+	s390)
+		printf '%s\n' s390x
+		;;
+	riscv)
+		printf '%s\n' riscv64
+		;;
+	*)
+		die "unsupported architecture: $arch"
+		;;
+	esac
+}
+
 busybox_path() {
 	local arch
 
@@ -479,6 +519,7 @@ commands:
   preflight-vng [root_disk] [arch]
   resolve-arch [root_disk] [arch] [chroot_dir]
   suse-arch <arch>
+  uname-arch <arch>
   vng-arch <arch>
 EOF
 }
@@ -534,6 +575,10 @@ resolve-arch)
 suse-arch)
 	[[ $# -eq 1 ]] || die "usage: cross suse-arch <arch>"
 	suse_arch "$1"
+	;;
+uname-arch)
+	[[ $# -eq 1 ]] || die "usage: cross uname-arch <arch>"
+	uname_arch "$1"
 	;;
 vng-arch)
 	[[ $# -eq 1 ]] || die "usage: cross vng-arch <arch>"

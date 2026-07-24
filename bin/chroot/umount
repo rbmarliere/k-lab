@@ -8,12 +8,21 @@ source "$THIS_DIR/../env.sh"
 [[ -n ${CHROOT-} ]] || exit 0
 resolve_chroot || exit 1
 chroot_overlay_paths || exit 1
+chroot_ns_paths || exit 1
+
+# No namespace holder running means nothing is mounted (see chroot_ns_alive
+# in bin/env.sh: every mount bin/chroot/* makes lives inside the holder's
+# private mount namespace, which cannot outlive it) and nothing to do.
+chroot_ns_alive || exit 0
 
 # unmount mountpoints under this run's merged chroot, deepest first (a
 # descending sort of the paths always visits a child before its own parent).
 # This never touches CHROOT_MERGED itself (the overlay), only what was
 # bind-mounted into it (proc, dev, sys, resolv.conf, OUTPUT_DIR, BUILD_DIR);
-# the overlay is torn down separately by bin/chroot/umount-overlay.
+# the overlay is torn down separately by bin/chroot/umount-overlay. The
+# mount list itself is read via chroot_nsenter (see bin/env.sh): these
+# mounts live in the namespace holder's own private mount table, invisible
+# to a plain host-side /proc/mounts read.
 #
 # A mount left behind here is not just messy: OUTPUT_DIR and BUILD_DIR are
 # bind-mounted from the real host paths into this view, so a later "rm -rf"
@@ -24,28 +33,51 @@ chroot_overlay_paths || exit 1
 # mountpoint from the namespace immediately (safe against a later "rm -rf")
 # even if the underlying resource stays busy a little longer in the
 # background.
+#
+# IMPORTANT, confirmed empirically (and consistent with how rootless
+# container runtimes handle the same thing): every mount recursively
+# rbind-propagated into this namespace's mount table from a *different*
+# (host) user namespace -- i.e. every /dev/* and /sys/* entry created by
+# bin/chroot/mount's `mount --rbind /dev|/sys ...` -- is unconditionally
+# kernel-locked (MNT_LOCKED; see fs/namespace.c's lock_mnt_tree(), "Notice
+# when we are propagating across user namespaces") against being
+# individually unmounted from inside this namespace, lazily or not. Neither
+# retrying nor `umount -l` can ever succeed on those specific entries no
+# matter how many attempts; this is not a race, it is a hard, permanent
+# kernel policy, and this loop's retries/WARN below are expected to (and
+# harmlessly do) run their course and fail for exactly those entries every
+# time this script runs standalone. The only thing that actually removes
+# them is destroying the whole mount namespace -- i.e. bin/chroot/umount-
+# overlay's kill_chroot_ns -- which is why bin/chroot/mount's own cleanup
+# trap calls that (full teardown) rather than just this script when a
+# partial mount sequence fails.
 unmount_one() {
 	local m=$1
 	local attempt
 
-	for ((attempt = 0; attempt < 5; attempt++)); do
-		if "$BIN"/run --as-root umount "$m" 2>/dev/null; then
+	for ((attempt = 0; attempt < 3; attempt++)); do
+		if chroot_nsenter umount "$m" 2>/dev/null; then
 			return 0
 		fi
 		# ignore races where the target is already gone.
-		grep -q " $m " /proc/mounts 2>/dev/null || return 0
+		chroot_nsenter grep -q " $m " /proc/mounts 2>/dev/null || return 0
 		sleep 0.2
 	done
 
-	echo "WARN: $m still busy after retries, forcing a lazy unmount" >&2
-	"$BIN"/run --as-root umount -l "$m" 2>/dev/null
-	! grep -q " $m " /proc/mounts 2>/dev/null
+	if chroot_nsenter umount -l "$m" 2>/dev/null; then
+		return 0
+	fi
+	# Expected/benign for a locked /dev or /sys entry (see above) -- call
+	# bin/chroot/umount-overlay for a full teardown if that is what is
+	# actually needed; only warn here since this is likely one of those.
+	echo "WARN: $m still mounted (locked mounts like /dev, /sys can only be cleared by a full teardown -- see bin/chroot/umount-overlay)" >&2
+	! chroot_nsenter grep -q " $m " /proc/mounts 2>/dev/null
 }
 
 ret=0
 while read -r m; do
 	unmount_one "$m" || ret=1
 done < <(
-	grep " $CHROOT_MERGED/" /proc/mounts | awk '{print $2}' | sort -r
+	chroot_nsenter grep " $CHROOT_MERGED/" /proc/mounts | awk '{print $2}' | sort -r
 )
 exit $ret

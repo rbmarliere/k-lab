@@ -1,5 +1,27 @@
 #!/bin/bash -eu
 
+# Manual, ad hoc "poke around inside a rootfs" helper: unlike
+# bin/chroot/{mount,run,umount,umount-overlay}, this mounts directly onto
+# CHROOT itself (no per-run overlay -- concurrent use against the same
+# CHROOT, including a concurrent CHROOT_BUILD run, is not safe) and its
+# whole mount+use+unmount lifecycle is a single script invocation, so it
+# has no need for the persistent, joined-by-separate-invocations namespace
+# holder bin/env.sh's ensure_chroot_ns/chroot_nsenter provide for that
+# multi-invocation case (see plans/03-chroot-build-userns.md). Instead, this
+# re-execs itself once, up front, inside its own private, unprivileged
+# user+mount+pid namespace (the same "self re-exec under unshare" pattern
+# bin/setup/debootstrap uses): everything from here on, including the real
+# chroot(2) at the bottom, already runs as ns-uid 0 (mapped to the invoking
+# host uid, never real root) for the rest of this one process tree's life,
+# so no sudo/bin/run/real root is needed anywhere below. As a side effect,
+# the mounts below now also land in a private mount namespace instead of
+# the host's shared one, so a crash here can no longer leak a stray mount
+# into the real host mount table either.
+if [[ -z ${_KLAB_CHROOT_SHELL_UNSHARED-} ]]; then
+	export _KLAB_CHROOT_SHELL_UNSHARED=1
+	exec unshare --user --pid --mount --map-root-user --fork -- "$0" "$@"
+fi
+
 die() {
 	echo "ERROR: $*" >&2
 	exit 1
@@ -16,22 +38,14 @@ shift
 
 resolve_chroot || exit 1
 
-as_root() {
-	if [[ $(id -u) -eq 0 ]]; then
-		"$@"
-	else
-		sudo "$@"
-	fi
-}
-
 mounts=()
 cleanup() {
 	local rc=$? m i
 
 	for ((i = ${#mounts[@]} - 1; i >= 0; i--)); do
 		m=${mounts[i]}
-		as_root umount -R -- "$m" 2>/dev/null ||
-			as_root umount -l -- "$m" 2>/dev/null || true
+		umount -R -- "$m" 2>/dev/null ||
+			umount -l -- "$m" 2>/dev/null || true
 	done
 
 	exit $rc
@@ -41,7 +55,7 @@ trap cleanup EXIT
 mount_and_track() {
 	local target=$1
 	shift
-	as_root mount "$@" -- "$target" || die "failed to mount $target"
+	mount "$@" -- "$target" || die "failed to mount $target"
 	mounts+=("$target")
 }
 
@@ -57,15 +71,15 @@ fi
 
 mount_and_track "$CHROOT/proc" -t proc proc
 mount_and_track "$CHROOT/dev" --rbind /dev
-as_root mount --make-rslave "$CHROOT/dev"
+mount --make-rslave "$CHROOT/dev"
 mount_and_track "$CHROOT/sys" --rbind /sys
-as_root mount --make-rslave "$CHROOT/sys"
+mount --make-rslave "$CHROOT/sys"
 
 if [[ ! -e $CHROOT/etc/resolv.conf ]]; then
-	as_root touch "$CHROOT/etc/resolv.conf" || die "unable to create $CHROOT/etc/resolv.conf"
+	touch "$CHROOT/etc/resolv.conf" || die "unable to create $CHROOT/etc/resolv.conf"
 fi
 mount_and_track "$CHROOT/etc/resolv.conf" --bind /etc/resolv.conf
-as_root mount -o remount,bind,ro "$CHROOT/etc/resolv.conf"
+mount -o remount,bind,ro "$CHROOT/etc/resolv.conf"
 
 env_args=(
 	PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -89,15 +103,15 @@ fi
 
 if [[ $# -eq 0 ]]; then
 	if [[ $chroot_shell == /bin/bash ]]; then
-		as_root chroot -- "$CHROOT" /usr/bin/env -i "${env_args[@]}" "$chroot_shell" -il
+		chroot -- "$CHROOT" /usr/bin/env -i "${env_args[@]}" "$chroot_shell" -il
 		exit $?
 	fi
 
-	as_root chroot -- "$CHROOT" /usr/bin/env -i "${env_args[@]}" "$chroot_shell" -i
+	chroot -- "$CHROOT" /usr/bin/env -i "${env_args[@]}" "$chroot_shell" -i
 	exit $?
 fi
 
 [[ $1 == -- ]] || die "unexpected argument: $1 (usage: shell CHROOT [-- cmd...])"
 shift
 [[ $# -gt 0 ]] || die "missing command after --"
-as_root chroot -- "$CHROOT" /usr/bin/env -i "${env_args[@]}" "$@"
+chroot -- "$CHROOT" /usr/bin/env -i "${env_args[@]}" "$@"
