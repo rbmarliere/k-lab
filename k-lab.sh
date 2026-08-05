@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
 	echo "ERROR: source ${BASH_SOURCE[0]} to load the k-lab wrapper and completion" >&2

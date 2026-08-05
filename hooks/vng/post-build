@@ -1,4 +1,4 @@
-#!/bin/bash -eu
+#!/usr/bin/env bash
 
 cd "$OUTPUT_DIR"
 [[ -f modules.order ]] || exit 0

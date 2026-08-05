@@ -1,1 +1,1 @@
-#!/bin/bash -eu
+#!/usr/bin/env bash

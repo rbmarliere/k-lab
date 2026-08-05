@@ -1,4 +1,4 @@
-#!/bin/bash -eu
+#!/usr/bin/env bash
 
 [[ ${CHROOT_BUILD:-0} == 1 ]] || exit 0
 [[ -n ${CHROOT-} ]] || exit 0

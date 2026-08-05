@@ -1,4 +1,4 @@
-#!/bin/bash -eu
+#!/usr/bin/env bash
 
 # CHROOT_BUILD=1 builds inside CHROOT (a directory produced by e.g.
 # bin/setup/debootstrap or bin/setup/suse-bootstrap) using ITS OWN native

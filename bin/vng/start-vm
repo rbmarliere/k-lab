@@ -1,4 +1,4 @@
-#!/bin/bash -eu
+#!/usr/bin/env bash
 
 root_disk=$(realpath "$ROOT_DISK")
 

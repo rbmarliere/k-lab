@@ -1,4 +1,4 @@
-#!/bin/bash -eu
+#!/usr/bin/env bash
 
 wait_for_group_exit() {
 	local pid=$1

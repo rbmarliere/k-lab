@@ -1,4 +1,4 @@
-#!/bin/bash -eu
+#!/usr/bin/env bash
 
 [[ -p $TMP_DIR/console ]] || mkfifo "$TMP_DIR"/console
 [[ -f $TMP_DIR/vng.log ]] || touch "$TMP_DIR"/vng.log

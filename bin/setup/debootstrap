@@ -1,4 +1,4 @@
-#!/bin/bash -eu
+#!/usr/bin/env bash
 
 # Runs fully unprivileged via two mechanisms, one per privilege need (see
 # plans/02-setup-scripts-fakeroot-unshare.md):

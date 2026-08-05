@@ -1,4 +1,4 @@
-#!/bin/bash -eu
+#!/usr/bin/env bash
 
 "$BIN"/cross preflight-vng "${ROOT_DISK-}" "$ARCH"
 "$BIN"/vng/min-config "$TMP_DIR"/vng-min.config "$ARCH"

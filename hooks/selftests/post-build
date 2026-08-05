@@ -1,4 +1,4 @@
-#!/bin/bash -eu
+#!/usr/bin/env bash
 
 # Generic kselftest installer: builds and installs the given TARGETS
 # (tools/testing/selftests/Makefile collection names, e.g. "bpf" or

@@ -1,4 +1,4 @@
-#!/bin/bash -eu
+#!/usr/bin/env bash
 
 THIS_DIR=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")
 

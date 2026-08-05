@@ -1,4 +1,4 @@
-#!/bin/bash -eu
+#!/usr/bin/env bash
 
 # Manual, ad hoc "poke around inside a rootfs" helper: unlike
 # bin/chroot/{mount,run,umount,umount-overlay}, this mounts directly onto

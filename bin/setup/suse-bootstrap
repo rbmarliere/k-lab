@@ -1,4 +1,4 @@
-#!/bin/bash -eu
+#!/usr/bin/env bash
 
 # Bootstrap a native-architecture Tumbleweed rootfs under $ROOT (default
 # /roots/tumbleweed) using zypper's own --root path-prefixing (never a real
@@ -46,7 +46,7 @@ zyp() {
 
 write_zypper_helper() {
 	cat >"$ROOT/zypper" <<EOF
-#!/bin/bash
+#!/usr/bin/env bash
 ROOT=\$(dirname -- "\$(realpath -- "\${BASH_SOURCE[0]}")")
 fakeroot -- zypper --non-interactive --root "\$ROOT" "\$@"
 EOF

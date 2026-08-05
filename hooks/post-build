@@ -1,4 +1,4 @@
-#!/bin/bash -eu
+#!/usr/bin/env bash
 
 [[ ${COMPILE_COMMANDS:-0} == 1 ]] || exit 0
 
