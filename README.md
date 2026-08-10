@@ -1,175 +1,132 @@
 # k-lab
 
-`k-lab` is a thin layer on top of `ktest.pl` for local kernel build, boot, and
-test loops with `virtme-ng`.
+`k-lab` is a thin layer over `ktest.pl` for local kernel build/boot/test loops
+with `virtme-ng`. `ktest.pl` stays the control plane and `virtme-ng` is the VM
+backend. A test either builds only, or builds and boots the fresh kernel in a VM
+against a disk image (`ROOT_DISK`) that supplies the guest userspace.
 
-It keeps `ktest.pl` as the control plane, uses `virtme-ng` as the VM backend,
-and can also boot an external disk image instead of sharing the host
-filesystem.
-
-This repo gives you:
-
-- shared config fragments under `include/`
-- ready-to-edit test configs under `tests/`
-- runtime helpers under `bin/` and `hooks/`
-- setup helpers under `bin/setup/`
-- the `kt` shell wrapper from `k-lab.sh`
-
-It has only been tested on an openSUSE Tumbleweed host so far.
-
-For upstream `ktest.pl` syntax and behavior, start with:
-
-- [sample.conf](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/tools/testing/ktest/sample.conf)
-- [Examples](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/tools/testing/ktest/examples)
-- [Tutorial](<https://elinux.org/images/f/fd/Automated_Testing_with_ktest.pl_(Embedded_Edition).pdf>)
+For upstream `ktest.pl` syntax and behavior, see
+[sample.conf](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/tools/testing/ktest/sample.conf),
+the [examples](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/tools/testing/ktest/examples),
+and this [tutorial](<https://elinux.org/images/f/fd/Automated_Testing_with_ktest.pl_(Embedded_Edition).pdf>).
 
 ## Quick Start
 
-`setup.conf` is the machine-local file for this checkout. It only needs:
+`setup.conf` is the machine-local config for this checkout. Required:
 
-- `LINUX_GIT`
-- `THIS_DIR`
+- `LINUX_GIT` — kernel worktree whose `tools/testing/ktest/ktest.pl` drives runs
+- `THIS_DIR` — absolute path to this checkout
 
-Optional `CROSS_COMPILE_*` and `CHROOT_*` overrides may also be set there (globally for this machine/checkout), or set directly within the test configuration files under `tests/` (test-locally).
-Optional `TEST_DIRS` may be set to a colon-separated list of extra test roots
-for `kt` lookup and tab completion.
+Optional in `setup.conf`: `KSOURCE_GIT` (SUSE configs), `TEST_DIRS`
+(colon-separated extra test roots for `kt` lookup and completion; relative
+paths resolve from `THIS_DIR`), and per-arch `CROSS_COMPILE_*` / `CHROOT_*`
+overrides. `CROSS_COMPILE` and `CHROOT` can also be set per test under `tests/`.
 
 Bootstrap:
 
 1. Edit `setup.conf`.
-2. Run `./setup.sh`.
-3. Build the matching static busybox for the arch you want to boot, for example
+2. Run `./setup.sh` — clones `tools/virtme-ng` and links `tools/ktest` to
+   `$LINUX_GIT/tools/testing/ktest`.
+3. Build a static busybox for each arch you boot, e.g.
    `./bin/setup/build-busybox x86_64`.
-4. Source the wrapper:
+4. `source /path/to/k-lab.sh`.
+5. From inside a kernel worktree, run `kt`.
 
-   ```bash
-   source /path/to/k-lab.sh
-   ```
-
-5. From inside a Linux kernel worktree, run `kt`.
-
-`setup.sh` clones `tools/virtme-ng` and links `tools/ktest` to
-`$LINUX_GIT/tools/testing/ktest`.
-
-Examples:
+### Examples
 
 ```bash
-# run the default build config and refresh compile_commands.json (build
-# only, no boot, so no ROOT_DISK is needed)
+# default build config: build only (no boot), refresh compile_commands.json
 kt
 
-# boot a disk image and run the smoke test's boot check; smoke/test sets its
-# own default ROOT_DISK (a Tumbleweed x86_64 image), so no flag is needed
+# boot smoke/test's default ROOT_DISK (Tumbleweed x86_64) and run its boot check
 kt -D TEST:=boot smoke/test
 
-# don't clean the current $OUTPUT_DIR, but force a defconfig
+# reuse the current OUTPUT_DIR (no clean) but force a defconfig
 kt -C -D BUILD_TYPE=defconfig
 
-# specify target and host compiler overrides and ssh port to use
-kt -D CC:=gcc-13 -D VNG_PORT:=22001 -D TEST:=boot smoke/test
+# override target/host compiler and ssh port
+kt -D CC=gcc-13 -D VNG_PORT:=22001 -D TEST:=boot smoke/test
 
-# override the test's default ROOT_DISK for a single run: boot a foreign-arch
-# disk image instead; ARCH is inferred from its filename (aarch64.img/
-# arm64.img -> arm64, s390x.img -> s390, ppc64le.img -> powerpc)
+# boot a foreign-arch image for one run; ARCH is inferred from the filename
 kt -D ROOT_DISK:=/roots/suse/Tumbleweed/aarch64.img -D TEST:=boot smoke/test
 
-# build inside a target rootfs's own chroot (CHROOT_BUILD), using its own
-# native toolchain (foreign arch transparently emulated via qemu-user), then
-# boot a matching (overridden) disk image
-kt -D ROOT_DISK:=/roots/suse/Tumbleweed/aarch64.img \
-   -D CHROOT:=/roots/suse/Tumbleweed/aarch64 -D CHROOT_BUILD=1 -D TEST:=chroot-boot smoke/test
+# build inside a target rootfs's own chroot, then boot a matching image
+kt -D CHROOT:=/roots/suse/Tumbleweed/aarch64 -D CHROOT_BUILD=1 \
+   -D ROOT_DISK:=/roots/suse/Tumbleweed/aarch64.img -D TEST:=chroot-boot smoke/test
 
-# build a tumbleweed kernel
+# build an openSUSE Tumbleweed kernel config
 kt -D TEST:=suse-only -D BRANCH:=stable
-
-# also refresh compile_commands.json after the build
-kt -D COMPILE_COMMANDS:=1 -D TEST:=boot smoke/test
 ```
 
-Wrapper options:
+### Wrapper options
 
-- `-C` sets `BUILD_NOCLEAN=1`
-- `-D name=value` passes a normal `ktest.pl` override
-- `-D name:=value` overrides a file-scoped parse-time variable such as
-  `ROOT_DISK`, `ARCH`, `VNG_PORT`, `TEST`, `CHROOT`, or `CROSS_COMPILE`. `kt`
-  itself only actively rejects (with an error) a plain `-D name=value` for
-  `ROOT_DISK`, `ARCH`, and `VNG_PORT`; passing `TEST`, `CHROOT`, or
-  `CROSS_COMPILE` without `:=` is not caught by `kt` and silently resolves to
-  an empty value instead of erroring, so always use `:=` for these six. For
-  `ROOT_DISK` specifically, prefer setting it inside the test file itself
-  (see "Writing Tests"); use this flag mainly to override that default for a
-  single ad hoc run against a different image.
-- `-n` prints the resolved config and exits
+- `-C` — set `BUILD_NOCLEAN=1`
+- `-D name=value` — pass a normal `ktest.pl` runtime override
+- `-D name:=value` — override a parse-time variable (`ROOT_DISK`, `ARCH`,
+  `VNG_PORT`, `TEST`, `CHROOT`, `CROSS_COMPILE`)
+- `-n` — print the resolved config and exit
+- `-h` — help
 
-Before a real run, `kt` does its own `ktest.pl --dry-run`, preflights
-resolved `ROOT_DISK` and `CHROOT` values (asking for confirmation before a
-run that boots a disk image or builds inside a chroot), prompts before
-reusing a stale kernel `.config` left over in `OUTPUT_DIR` from a prior
-`oldconfig` run, and creates `TMP_DIR.lock` so two runs do not reuse the same
-output directory.
+With no test argument, `kt` runs `include/defaults.conf`. Test names tab-complete
+from `tests/` and `TEST_DIRS`.
 
-Run artifacts live under `tmp/$KLAB_ID`: `kt` derives `KLAB_ID` as a stable
-per-test hash of the test's path plus its resolved `ROOT_DISK`/`ARCH` (so
-distinct tests, or the same test with a different disk/arch, never share a
-TMP_DIR; NOT derived from `TEST`, `CHROOT`, or `CHROOT_BUILD` -- runs that
-differ only in one of those currently do share a TMP_DIR). Direct `ktest.pl`
-invocations that bypass `kt` fall back to `tmp/$VNG_PORT` instead. The kernel
-tree also gets convenience links keyed by `$VNG_PORT` regardless of
-`KLAB_ID`, such as `tmp-$VNG_PORT` and `ssh-$VNG_PORT`. Plain `kt` refreshes
-`compile_commands.json` by default; named tests only do so when
-`COMPILE_COMMANDS=1`. The symlink points at
+**Always use `:=` for those six parse-time variables on the command line.** `kt`
+rejects a plain `-D ROOT_DISK=`, `-D ARCH=`, or `-D VNG_PORT=` with an error,
+but does *not* catch `-D TEST=`, `-D CHROOT=`, or `-D CROSS_COMPILE=` — those
+are silently ignored and your override never takes effect. Prefer setting
+`ROOT_DISK` in the test file (see [Writing Tests](#writing-tests)); use the flag
+only for one-off overrides.
+
+### What a run does
+
+Before each real run, `kt` runs its own `ktest.pl --dry-run` to resolve the
+config, then:
+
+- preflights the resolved `ROOT_DISK`/`CHROOT` and asks for confirmation before
+  booting a disk image or building in a chroot;
+- prompts before an `oldconfig` build reuses a stale `.config` already in
+  `OUTPUT_DIR` (continue / wipe to defconfig / abort);
+- picks a free `VNG_PORT` and creates `<TMP_DIR>.lock` so two runs never share
+  an output directory.
+
+Artifacts live under `tmp/$KLAB_ID`, where `KLAB_ID` is a stable hash of the
+test path plus its resolved `ROOT_DISK`/`ARCH`. So different tests — or the same
+test on a different disk/arch — never share a `TMP_DIR`. It is **not** keyed on
+`TEST`, `CHROOT`, or `CHROOT_BUILD`, so runs differing only in those *do* share
+one. Direct `ktest.pl` runs that bypass `kt` fall back to `tmp/$VNG_PORT`. The
+kernel tree also gets `tmp-$VNG_PORT` and `ssh-$VNG_PORT` convenience links.
+
+`compile_commands.json` is refreshed automatically for a bare `kt`, and for
+named tests only with `COMPILE_COMMANDS=1`; the symlink points at
 `compile_commands-$ARCH-$VNG_PORT.json`.
 
 ## Dependencies
 
-In openSUSE Tumbleweed, the following packages should be enough (with the
-exception of armhf cross toolchain):
+On openSUSE Tumbleweed the following should be enough (armhf cross toolchain
+excepted):
 
 ```
+zypper install -t pattern devel_basis
 zypper install \
-	-t pattern devel_basis
-
-zypper install \
-	bzip2 \
-	cross-aarch64-gcc15 \
-	cross-ppc64le-gcc15 \
-	cross-s390x-gcc15 \
-	cross-riscv64-gcc15 \
-	debootstrap \
-	fakeroot \
-	python3-argcomplete \
-	python3-requests \
-	qemu-arm \
-	qemu-extra \
-	qemu-linux-user \
-	qemu-ppc \
-	qemu-s390x \
-	sudo
+	bzip2 cross-aarch64-gcc15 cross-ppc64le-gcc15 cross-s390x-gcc15 \
+	cross-riscv64-gcc15 debootstrap fakeroot python3-argcomplete \
+	python3-requests qemu-arm qemu-extra qemu-linux-user qemu-ppc \
+	qemu-s390x sudo
 ```
 
-`sudo` is only needed for `bin/setup/build-busybox`'s optional, interactive
-`sudo zypper install` (auto-installing a missing cross-compiler/glibc-devel
-package on request) -- nothing else in this repo uses it; see "Privileges"
-below.
-
-If you build for a non-native `ARCH` on the host, the host also needs a usable
-cross toolchain. By default, k-lab derives `CROSS_COMPILE` from `ARCH`;
-`setup.conf` may override that with `CROSS_COMPILE_*`.
-
-k-lab does not check or install packages into `ROOT_DISK`: the disk image is
-assumed to already be fully set up with whatever a test needs before you
-point `ROOT_DISK` at it.
+Building for a non-native `ARCH` on the host needs a matching cross toolchain;
+k-lab derives `CROSS_COMPILE` from `ARCH` unless `setup.conf` overrides it.
+`sudo` is used in exactly one place — `build-busybox` runs `sudo zypper install`
+to pull in a missing cross-compiler or `glibc-devel` package (only when
+`rpm`/`zypper` are present and the package is absent); nothing else in the repo
+uses it.
 
 ## Writing Tests
 
-`include/defaults.conf` is the shared base layer stack. Most new tests should
-include it and then define only the test-local pieces they care about, as
-`tests/smoke` does.
-
-Tests live in their own subdirectory (`tests/<name>/test`), so `INCLUDE`
-paths are relative to that directory (`../../include/...`).
-
-Minimal shape:
+`include/defaults.conf` is the shared base stack. Most tests `INCLUDE` it and
+then define only their test-local pieces (see `tests/smoke`). Each test lives in
+`tests/<name>/test`, so `INCLUDE` paths are relative to that directory
+(`../../include/...`).
 
 ```conf
 # ROOT_DISK := /path/to/x86_64.img   # only if the test boots a VM
@@ -186,15 +143,51 @@ TEST_BIN = ./my-test.sh
 TEST = ${DO_TEST_SIMPLE}
 ```
 
-If a test boots a VM, set `ROOT_DISK := /path/to/image.img` before `INCLUDE`
-so a bare `kt <dir>/<file>` reproduces the run on its own; reserve
-`-D ROOT_DISK:=/other/image.img` on the command line for one-off overrides
-(e.g. trying the same test against a different image or arch).
+If a test boots a VM, set `ROOT_DISK := ...` before `INCLUDE` so a bare
+`kt <dir>/<file>` reproduces the run on its own; reserve `-D ROOT_DISK:=...` for
+one-off overrides (e.g. the same test against a different image or arch).
 
-For BPF selftests, also include `include/selftests-bpf.conf` after
-`defaults.conf`: it installs the `bpf` collection during the build and
-prepares the guest to run `test_progs` from the install tree, so a test only
-needs to pick a `TEST_BIN`:
+### Parse-time (`:=`) vs runtime (`=`)
+
+Use `:=` for parse-time variables that affect file composition or derived paths.
+Set them at the top level, **never inside `TEST_START`**:
+
+- `ROOT_DISK`, `ARCH`, `VNG_PORT`, `TEST`
+- `CHROOT` (and its per-arch `CHROOT_*` inputs)
+- `CROSS_COMPILE` (and its per-arch `CROSS_COMPILE_*` inputs; unused when
+  `CHROOT_BUILD=1`, since the chroot uses its own native toolchain)
+
+Use `=` for normal runtime options: `BUILD_TYPE`, `ADD_CONFIG`, `CC`, `HOSTCC`,
+`HOSTCFLAGS`, `VNG_MEM`, `VNG_ARGS`, `CHROOT_BUILD`, `PREP_TEST`,
+`POST_BUILD_APPEND`, … Of these, `CC`, `HOSTCC`, `HOSTCFLAGS`, `CHROOT_BUILD`,
+and `VNG_MEM` are resolved lazily per test, so they work whether set at the top
+level or inside a specific `TEST_START` block.
+
+### Test helpers (`include/patterns.conf`)
+
+- `DO_TEST_SIMPLE` — pass/fail on `TEST_BIN`'s exit status
+- `DO_TEST_PATTERN_OK` — pass only if `PATTERN` appears in the captured output
+- `DO_TEST_PATTERN_FAIL` — pass only if `PATTERN` does not appear
+
+The `PATTERN_*` macros key off the captured log text only and do **not** preserve
+`TEST_BIN`'s exit status; escape quotes inside `PATTERN` (`'` → `'\''`). If
+`PREP_TEST` is set it is inserted before `TEST_BIN` in the same shell command,
+so it must end with `&&` or `;`.
+
+### Hooks
+
+- use `*_APPEND` for test-local extra work
+- replace a full `PRE_*`/`POST_*` phase only when you intend to own the whole
+  phase
+
+### BPF selftests
+
+Include `include/selftests-bpf.conf` after `defaults.conf`: it installs the
+`bpf` collection during the build and prepares the guest to run `test_progs`
+from the install tree, so the test only needs to pick a `TEST_BIN`. The build
+environment (host, or `CHROOT` when `CHROOT_BUILD=1`) must already provide the
+bpf build deps (clang, lld, llvm(+-dev), dwarves, libdwarf, a C++ compiler,
+python3-docutils, xxd); k-lab does not install them.
 
 ```conf
 INCLUDE ../../include/defaults.conf
@@ -206,201 +199,112 @@ TEST_BIN = ./test_progs -vv -t <subtest>
 TEST = ${DO_TEST_SIMPLE}
 ```
 
-Use `:=` only for parse-time values that affect file composition or derived
-paths:
+## SUSE specifics
 
-- `ROOT_DISK`
-- `ARCH`
-- `VNG_PORT`
-- `TEST`
-- `CHROOT` (and its per-arch `CHROOT_*` inputs)
-- `CROSS_COMPILE` (and its per-arch `CROSS_COMPILE_*` inputs; unused when
-  `CHROOT_BUILD=1`, since the chroot uses its own native toolchain instead)
-
-Do not set those parse-time variables inside `TEST_START`.
-
-Use `=` for normal runtime options such as:
-
-- `BUILD_TYPE`
-- `ADD_CONFIG`
-- `CC`
-- `HOSTCC`
-- `HOSTCFLAGS`
-- `VNG_MEM`
-- `VNG_ARGS`
-- `CHROOT_BUILD`
-- `PREP_TEST`
-- `POST_BUILD_APPEND`
-
-Unlike the `:=` list above, `CC`, `HOSTCC`, `HOSTCFLAGS`, `CHROOT_BUILD`, and
-`VNG_MEM` are resolved lazily, per test, at run time, so they work correctly
-whether set at top level or inside a specific `TEST_START` block.
-
-Useful helpers from `include/patterns.conf`:
-
-- `DO_TEST_SIMPLE`: pass or fail on `TEST_BIN` exit status
-- `DO_TEST_PATTERN_OK`: pass only if `PATTERN` appears in the captured output
-- `DO_TEST_PATTERN_FAIL`: pass only if `PATTERN` does not appear in the
-  captured output
-
-If `PREP_TEST` is set, it is inserted before `TEST_BIN` in the same shell
-command, so it must end with `&&` or `;`.
-
-For hooks, keep it simple:
-
-- use `*_APPEND` for test-local extra work
-- replace a full `PRE_*` or `POST_*` phase only when you intentionally want to
-  own the whole phase
-
-# SUSE specifics
-
-`include/suse.conf` is part of the default stack and provides the shared SUSE
-selectors `suse` and `suse-only`. Both use
-`useconfig:${KSOURCE_GIT}/${BRANCH}/config/<SUSE arch>/default`; `suse-only` also
-clears `ADD_CONFIG`. To use them, define `BRANCH` in the test file (required).
-`VERSION` and `PATCHLEVEL` are optional and must be set together or not at
-all: set both to target a specific SLE product/patchlevel, or leave both
-unset to default to openSUSE Tumbleweed. The matching SUSE pre-ktest hook
-(`hooks/suse/pre-ktest`) writes the minimal config fragment for the selected
-product version.
+`include/suse.conf` (part of the default stack) provides the `suse` and
+`suse-only` selectors. Both build with
+`useconfig:${KSOURCE_GIT}/${BRANCH}/config/<SUSE arch>/default`; `suse-only`
+also clears `ADD_CONFIG`. `BRANCH` is required: set it in the test file, or via
+`-D` as in the Quick Start example. `VERSION` and `PATCHLEVEL` are optional and
+must be set together: set both to target a specific SLE product/patchlevel, or
+leave both unset for openSUSE Tumbleweed.
+`hooks/suse/pre-ktest` writes the matching config fragment.
 
 ## Disk Images and Privileges
 
-Set `ROOT_DISK := /path/to/disk.img` to boot that disk image via
-virtme-ng's `--root-disk` instead of sharing the host filesystem.
-`ROOT_DISK` must be a regular file (a raw or qcow2-style image with an ext4
-filesystem inside); k-lab does not support pointing `ROOT_DISK` at a
-directory. Prefer setting `ROOT_DISK` inside the test file itself (before
-`INCLUDE`), the same way `tests/smoke/test` hardcodes a default `CHROOT`,
-rather than only ever passing it via `-D ROOT_DISK:=` on the command line:
-that keeps a bare `kt <dir>/<file>` self-contained and reproducible. Use the
-CLI flag to override that default for a single run against a different
-image.
+Any test that boots a VM requires a `ROOT_DISK`: k-lab always boots the freshly
+built kernel against a disk image via virtme-ng's `--root-disk` (there is no
+host-filesystem-share boot mode), and that image supplies the guest userspace.
+Set `ROOT_DISK := /path/to/disk.img` — a regular file (a raw or qcow2-style
+image with an ext4 filesystem inside), never a directory. Leave it unset (the
+default, `0`) only for build-only tests that never boot. k-lab does not provision
+the image — set it up with everything a test needs beforehand, e.g. with
+[kiwi](https://osinside.github.io/kiwi/), `virt-builder`, or a converted cloud
+image; it just needs a plain ext4 filesystem virtme-ng can mount.
 
-If `ARCH` is not set explicitly (and no `--arch` is forwarded via
-`VNG_ARGS`), it is inferred from `ROOT_DISK`'s filename: `aarch64.img`/
-`arm64.img` -> `arm64`, `s390x.img` -> `s390`, `ppc64le.img`/`ppc64.img` ->
-`powerpc`, etc. `ROOT_DISK` may be left unset (the default, `0`) for
-build-only tests that never boot a VM; any test that actually boots always
-requires it.
+If `ARCH` is not set explicitly, it is inferred from `ROOT_DISK`'s filename:
+`aarch64.img`/`arm64.img` → `arm64`, `s390x.img` → `s390`,
+`ppc64le.img`/`ppc64.img` → `powerpc`, etc.
 
-VM boots always use a matching static busybox build. Build it first, for
-example `./bin/setup/build-busybox x86_64` or
-`./bin/setup/build-busybox arm64`.
+Every VM boot needs a matching static busybox; build it first, e.g.
+`./bin/setup/build-busybox x86_64`.
 
-k-lab does not check or install packages into `ROOT_DISK`; provision the
-image with whatever a test needs ahead of time. Disk images can be built
-with tools such as [kiwi](https://osinside.github.io/kiwi/), `virt-builder`,
-or by converting an existing cloud image -- they just need to be a plain
-ext4 filesystem virtme-ng can mount directly.
+### Building inside a target rootfs (chroot)
 
-### Building inside a target root filesystem (chroot)
+By default builds run on the host with the resolved `CROSS_COMPILE` toolchain
+(empty for native `x86_64`). Set `CHROOT_BUILD = 1` plus `CHROOT :=
+/path/to/rootfs` (a directory) to instead build inside that rootfs via a real
+`chroot`, using its own native toolchain — the compiler that actually produced
+the target distro, not a cross-compiler pointed at its headers. This is handy
+when an older kernel needs an older compiler shipped only in an older rootfs.
+Foreign arches run transparently via the host's `qemu-user`/`binfmt_misc`, so
+`CHROOT` can be any arch.
 
-By default, builds happen on the host with the resolved `CROSS_COMPILE`
-toolchain (empty for native `x86_64`, otherwise the matching `cross-*-gcc*`
-package or a `CROSS_COMPILE_*` override). Set `CHROOT_BUILD = 1` plus `CHROOT
-:= /path/to/rootfs` (a directory) to instead build inside that rootfs via a
-real `chroot`, using that rootfs's own native toolchain (its own `gcc`, `make`,
-headers and libraries) -- the same compiler that produced the actual target
-distro, not just a cross-compiler pointed at its headers (this might be handy
-in especial for cases where an older kernel version requires an older compiler
-which is only available in also older root filesystems). Foreign arches are
-transparently emulated by the host's `qemu-user`/`binfmt_misc` registration
-(already required for `qemu-linux-user`, see Dependencies), so `CHROOT` can be
-any arch regardless of the host's own.
+Each run gets its own private, writable overlay over `CHROOT`
+(`lowerdir=CHROOT`, per-run `upperdir`/`workdir` under `TMP_DIR`), so concurrent
+runs sharing a `CHROOT` never write to the same path and `CHROOT` itself is
+never modified; `BUILD_DIR` and `OUTPUT_DIR` are bind-mounted in at matching
+paths so the chrooted build sees the same source tree and `OUTPUT_DIR`.
 
-If `ARCH` is not set explicitly and cannot be inferred from `ROOT_DISK`'s
-filename, and an explicit `-D CHROOT:=...` was given, `ARCH` is inferred by
-inspecting a real ELF binary under `CHROOT` (e.g. its `/bin/sh`) -- `CHROOT`
-directories have no naming convention to rely on, unlike `ROOT_DISK`'s
-filename.
+Per-arch `CHROOT_*` in `setup.conf` let `CHROOT` be picked from `ARCH` (like
+`CROSS_COMPILE_*`); `-D CHROOT:=...` overrides that. `CHROOT` is unrelated to
+`ROOT_DISK` — the build chroot need not match the booted image. If `ARCH` is not
+set explicitly, cannot be inferred from `ROOT_DISK`, and `CHROOT` is set
+explicitly (in the test file or via `-D CHROOT:=`), `ARCH` is inferred by
+inspecting an ELF binary under `CHROOT` (chroot directories have no filename
+convention to rely on).
 
-Every build run gets its own private, writable overlay over `CHROOT`
-(`lowerdir=CHROOT`, per-run `upperdir`/`workdir` under `TMP_DIR`), so
-concurrent runs sharing the same `CHROOT` (e.g. a shared `CHROOT_ARM64` in
-`setup.conf`) never mount, chroot into, or write to the same path, and
-`CHROOT` itself is never modified. `BUILD_DIR` and `OUTPUT_DIR` are
-bind-mounted into that overlay at matching paths so the chrooted build reads
-the same kernel source tree and writes to the same `OUTPUT_DIR` as the rest
-of the run.
+#### Creating rootfs directories
 
-Like `CROSS_COMPILE_*`, `CHROOT_*` overrides may be set per-arch in
-`setup.conf` (`CHROOT_X86_64`, `CHROOT_ARM64`, `CHROOT_ARM`,
-`CHROOT_POWERPC`, `CHROOT_S390`, `CHROOT_RISCV`) so `CHROOT` is picked
-automatically from `ARCH`; `-D CHROOT:=...` overrides that for a single run.
-`CHROOT` is unrelated to `ROOT_DISK`: the same rootfs directory used as a
-build chroot is not, and does not need to be, related to the disk image
-booted at test time.
-
-`bin/setup/debootstrap` is a small helper for Debian rootfs creation, and
-runs fully unprivileged (no `sudo`):
+`bin/setup/debootstrap` (Debian) and `bin/setup/suse-bootstrap` (Tumbleweed,
+native arch only) build rootfs directories usable as `CHROOT`, fully
+unprivileged:
 
 ```bash
 ./bin/setup/debootstrap -s trixie -a arm64 /roots/debian/trixie/arm64
-```
-
-Package unpacking (first stage and any later `apt-get` installs) runs
-under `fakeroot`, while the real `chroot(2)` calls (second stage, package
-installs, `-e`) run inside an unprivileged, mapped-root user namespace
-(`unshare --map-root-user`) -- see the script's top-of-file comment for why
-both are needed. Known gap: a package or `-e` command that needs to
-`chown` to some *other* specific non-root id from inside the chroot is not
-covered.
-
-`bin/setup/suse-bootstrap` is a small helper for Tumbleweed rootfs creation
-(only for native architecture), and also runs fully unprivileged: it
-re-execs itself under `fakeroot` (so RPM payload extraction can `chown`/
-`mknod` as it expects) instead of needing real root.
-
-```bash
 env ROOT=/roots/tumbleweed ./bin/setup/suse-bootstrap
-env ROOT=/roots/tumbleweed EXTRA="libstdc++6" ./bin/setup/suse-bootstrap < /tmp/custom-sles-repos
 ```
 
-Files that appear "root-owned" inside the resulting rootfs are only
-fake-owned within that `fakeroot` session -- on disk they belong to the
-invoking user (fine for use as a k-lab `CHROOT`; if shipping the rootfs
-somewhere that expects real root-owned files, use `fakeroot -s`/`-i
-<statefile>` or a final real-root `chown -R root:root` pass instead). The
-generated `$ROOT/zypper` helper uses `fakeroot` too, for the same reason.
-
-(These two helpers use their own `ROOT` env var for their own target path,
-unrelated to k-lab's `ROOT_DISK`/`CHROOT`. Their output is a directory,
-suitable for `CHROOT` -- not for k-lab's own `ROOT_DISK`, which must be a
-disk image.) Other rootfs-directory options include
+Both take their own target path (their `ROOT`/argument, unrelated to k-lab's
+`ROOT_DISK`/`CHROOT`) and produce a directory, not a disk image. Package
+extraction runs under `fakeroot`; `debootstrap`'s real `chroot(2)` steps run in
+an unprivileged mapped-root user namespace. Both leave files owned by the
+invoking user on disk (only fake-owned as root) — fine for a `CHROOT`; use
+`fakeroot -s`/`-i <statefile>` or a real-root `chown -R root:root` pass only if
+shipping the rootfs elsewhere. `debootstrap` has one further gap: a chrooted
+postinst or `-e` command that `chown`s to some *other* non-root id is not covered
+(its chroot phase maps only your uid to `0`). Other options include
 [pacstrap](https://wiki.archlinux.org/title/Pacstrap),
-[alpine-make-rootfs](https://github.com/alpinelinux/alpine-make-rootfs),
-[mkosi](https://github.com/systemd/mkosi), etc.
+[alpine-make-rootfs](https://github.com/alpinelinux/alpine-make-rootfs), and
+[mkosi](https://github.com/systemd/mkosi).
 
 ### Privileges
 
-None of k-lab's own runtime or setup flows need real root, `sudo`, or any
-privileged daemon.
+Nothing in k-lab's runtime or setup needs real root, `sudo`, or a privileged
+daemon, except `build-busybox` optionally running `sudo zypper install` for a
+missing cross toolchain (see [Dependencies](#dependencies)):
 
-- `vng` (virtme-ng) boots run as the invoking user; QEMU usermode
-  networking and `--root-disk` need no host-side privileges.
-- `bin/setup/suse-bootstrap` and `bin/setup/debootstrap` run under
-  `fakeroot` (see their own top-of-file comments for details).
-- `CHROOT_BUILD=1` (see `bin/chroot/*`) mounts and chroots inside an
-  **unprivileged user namespace** instead of as real root -- the same
-  approach rootless Podman/Buildah/bubblewrap use.
+- `vng` boots as the invoking user; QEMU usermode networking and `--root-disk`
+  need no host privileges.
+- `debootstrap` and `suse-bootstrap` run under `fakeroot` (plus, for
+  `debootstrap`'s `chroot(2)` steps, an unprivileged mapped-root user namespace).
+- `CHROOT_BUILD=1` mounts and chroots inside an **unprivileged user namespace**
+  (the same approach as rootless Podman/Buildah/bubblewrap), never real root.
 
-Requirements: unprivileged user namespaces enabled (default on most
-distros; otherwise `sysctl kernel.unprivileged_userns_clone=1`) and a
-reasonably recent `util-linux` (2.42.1 tested). `CHROOT` itself must be
-owned by the invoking user.
+Requirements: unprivileged user namespaces enabled (default on most distros;
+otherwise `sysctl kernel.unprivileged_userns_clone=1`), a reasonably recent
+`util-linux` (2.42.1 tested), and `CHROOT` owned by the invoking user.
 
-One caveat: builds run with `--as-user` see uid/gid `0` inside the chroot
-(this used to be the invoking user's real ids). This is harmless -- it is
-never real root, only ever the invoking uid seen as `0` -- but a build that
-branches on `[ "$(id -u)" = 0 ]` may behave differently than before.
+Caveat: chrooted builds see uid/gid `0` inside the chroot (never real root, only
+the invoking user mapped to `0`), so a build that branches on
+`[ "$(id -u)" = 0 ]` may behave differently than on the host.
 
 ## Project Layout
 
-- `include/`: shared config fragments
-- `tests/`: top-level test targets and selftest wrappers
-- `hooks/`: scripts used by `PRE_*` and `POST_*` phases
-- `bin/`: runtime helpers used by generated `ktest.pl` commands
-- `bin/setup/`: setup-time helpers
-- `config/`: extra kernel config fragments
-- `tools/`: repo-local tool state
+- `include/` — shared config fragments
+- `tests/` — test targets and selftest wrappers
+- `hooks/` — scripts run in `PRE_*`/`POST_*` phases
+- `bin/` — runtime helpers used by generated `ktest.pl` commands
+- `bin/setup/` — setup-time helpers
+- `config/` — extra kernel config fragments
+- `tools/` — repo-local tool state (ktest link, virtme-ng, busybox)
