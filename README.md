@@ -65,6 +65,7 @@ kt -D TEST:=suse-only -D BRANCH:=stable
 - `-D name:=value` — override a parse-time variable (`ROOT_DISK`, `ARCH`,
   `VNG_PORT`, `TEST`, `CHROOT`, `CROSS_COMPILE`)
 - `-n` — print the resolved config and exit
+- `-y` — non-interactive
 - `-h` — help
 
 With no test argument, `kt` runs `include/defaults.conf`. Test names tab-complete

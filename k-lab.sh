@@ -18,12 +18,13 @@ if ! require_vng; then
 fi
 
 usage() {
-	echo "usage: kt [-C] [-D name=value] [-n] [test]"
+	echo "usage: kt [-C] [-D name=value] [-n] [-y] [test]"
 	echo
 	echo "options:"
 	echo "  -C              set BUILD_NOCLEAN=1"
 	echo "  -D name=value   pass through to ktest.pl as -D name=value or -D name:=value"
 	echo "  -n              print resolved test options and exit"
+	echo "  -y              non-interactive: auto-confirm prompts, detach ktest.pl's stdin"
 	echo "  -h              show this help"
 	echo
 	echo "run kt from within a Linux kernel worktree."
@@ -297,6 +298,7 @@ kt() {
 	local kargs=()
 	local compile_commands_set=0
 	local dry_run=0
+	local noninteractive=0
 
 	if ! require_ktest; then
 		return 1
@@ -305,7 +307,7 @@ kt() {
 		return 1
 	fi
 
-	while getopts ":CD:hn" opt; do
+	while getopts ":CD:hny" opt; do
 		case "$opt" in
 		C) kargs+=("-D" "BUILD_NOCLEAN=1") ;;
 		D)
@@ -321,6 +323,7 @@ kt() {
 			kargs+=("-D" "$OPTARG")
 			;;
 		n) dry_run=1 ;;
+		y) noninteractive=1 ;;
 		h)
 			usage
 			return 0
@@ -425,9 +428,13 @@ kt() {
 	fi
 	if [[ ${#summary_parts[@]} -gt 0 ]]; then
 		local IFS=', '
-		_kt_confirm \
-			"INFO: privileged path configured: ${summary_parts[*]}" \
-			'Do you want to continue? [Y/n] ' || return 1
+		if ((noninteractive)); then
+			echo "INFO: privileged path configured: ${summary_parts[*]} (auto-confirmed, -y)" >&2
+		else
+			_kt_confirm \
+				"INFO: privileged path configured: ${summary_parts[*]}" \
+				'Do you want to continue? [Y/n] ' || return 1
+		fi
 	fi
 
 	local output_dir
@@ -456,13 +463,17 @@ kt() {
 			fi
 		fi
 		if ((needs_prompt)); then
-			_kt_preflight_oldconfig "$output_dir"
-			case $? in
-			0) ;;
-			1) rm -rf "$output_dir"
-			   kargs+=("-D" "BUILD_TYPE=defconfig") ;;
-			*) return 1 ;;
-			esac
+			if ((noninteractive)); then
+				echo "INFO: BUILD_TYPE is oldconfig and ${output_dir}/.config already exists; continuing (auto-confirmed, -y)" >&2
+			else
+				_kt_preflight_oldconfig "$output_dir"
+				case $? in
+				0) ;;
+				1) rm -rf "$output_dir"
+				   kargs+=("-D" "BUILD_TYPE=defconfig") ;;
+				*) return 1 ;;
+				esac
+			fi
 		fi
 	fi
 
@@ -506,7 +517,16 @@ kt() {
 
 		trap 'rm -f "$lock_file"' EXIT
 
-		command "$KTEST_PL" "${kargs[@]}" "$file_path"
+		if ((noninteractive)); then
+			# Never-written-to FIFO, shared across runs: keeps ktest.pl's stdin
+			# open but never ready, so select() blocks instead of busy-spinning
+			# on /dev/null (README, "Why not `yes | kt`").
+			local stdin_fifo="$THIS_DIR/tmp/.kt-blackhole"
+			[[ -p $stdin_fifo ]] || mkfifo "$stdin_fifo" 2>/dev/null
+			command "$KTEST_PL" "${kargs[@]}" "$file_path" <>"$stdin_fifo"
+		else
+			command "$KTEST_PL" "${kargs[@]}" "$file_path"
+		fi
 	)
 }
 
