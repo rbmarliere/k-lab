@@ -41,6 +41,19 @@ clone_vng() {
 	fi
 }
 
+clone_busybox_builder() {
+	if [[ -e $BUSYBOX_DIR && ! -d $BUSYBOX_DIR ]]; then
+		die "BUSYBOX_DIR exists but is not a directory: $BUSYBOX_DIR"
+	fi
+	if [[ ! -d $BUSYBOX_DIR ]]; then
+		mkdir -p -- "$(dirname -- "$BUSYBOX_DIR")"
+		git clone --single-branch https://github.com/rbmarliere/busybox-static-builder "$BUSYBOX_DIR"
+	fi
+	if [[ ! -f $BUSYBOX_DIR/build ]]; then
+		die "busybox-static-builder checkout looks incomplete: $BUSYBOX_DIR"
+	fi
+}
+
 for cmd in git ln make; do
 	if ! command -v "$cmd" >/dev/null 2>&1; then
 		die "missing required command: $cmd"
@@ -50,6 +63,9 @@ done
 mkdir -p -- "$TOOLS_DIR"
 link_ktest
 clone_vng
+clone_busybox_builder
+./tools/busybox-static-builder/prepare
+./tools/busybox-static-builder/build
 cat <<EOF
 
 Setup complete.
@@ -58,10 +74,4 @@ Load the kt shell wrapper and completion with:
   source "$THIS_DIR/k-lab.sh"
 
 Add that line to your shell rc file if you want it by default.
-
-Before using kt or virtme-ng, build the matching static busybox binary for the
-arch you want to boot, for example:
-  $THIS_DIR/bin/setup/build-busybox x86_64
-
-Run '$THIS_DIR/bin/setup/build-busybox --help' for details.
 EOF

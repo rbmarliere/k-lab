@@ -442,7 +442,7 @@ busybox_path() {
 	local arch
 
 	arch=$(normalize_arch "$1")
-	printf '%s\n' "$TOOLS_DIR/busybox/$arch/bin/busybox"
+	printf '%s\n' "$BUSYBOX_DIR/$arch/bin/busybox"
 }
 
 resolve_arch() {
@@ -495,7 +495,7 @@ preflight_vng() {
 
 	arch=$(normalize_arch "$arch")
 	busybox=$(busybox_path "$arch")
-	[[ -x $busybox ]] || die "missing static busybox: $busybox (run $THIS_DIR/bin/setup/build-busybox $arch)"
+	[[ -x $busybox ]] || die "missing static busybox: $busybox (run $BUSYBOX_DIR/build $arch)"
 }
 
 usage() {
