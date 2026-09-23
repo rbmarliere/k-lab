@@ -159,8 +159,8 @@ Set them at the top level, **never inside `TEST_START`**:
   `CHROOT_BUILD=1`, since the chroot uses its own native toolchain)
 
 Use `=` for normal runtime options: `BUILD_TYPE`, `ADD_CONFIG`, `CC`, `HOSTCC`,
-`HOSTCFLAGS`, `VNG_MEM`, `VNG_ARGS`, `CHROOT_BUILD`, `PREP_TEST`,
-`POST_BUILD_APPEND`, … Of these, `CC`, `HOSTCC`, `HOSTCFLAGS`, `CHROOT_BUILD`,
+`HOSTCFLAGS`, `VNG_MEM`, `VNG_ROOT_DEV`, `VNG_ROOT_FSTYPE`, `VNG_ARGS`,
+`CHROOT_BUILD`, `PREP_TEST`, `POST_BUILD_APPEND`, … Of these, `CC`, `HOSTCC`, `HOSTCFLAGS`, `CHROOT_BUILD`,
 and `VNG_MEM` are resolved lazily per test, so they work whether set at the top
 level or inside a specific `TEST_START` block.
 
@@ -217,7 +217,11 @@ Any test that boots a VM requires a `ROOT_DISK`: k-lab always boots the freshly
 built kernel against a disk image via virtme-ng's `--root-disk` (there is no
 host-filesystem-share boot mode), and that image supplies the guest userspace.
 Set `ROOT_DISK := /path/to/disk.img` — a regular file (a raw or qcow2-style
-image with an ext4 filesystem inside), never a directory. Leave it unset (the
+image with an ext4 filesystem inside), never a directory. The defaults
+(`VNG_ROOT_DEV = /dev/vda`, `VNG_ROOT_FSTYPE = ext4`) suit a plain
+single-partition ext4 image; set `VNG_ROOT_DEV` and `VNG_ROOT_FSTYPE` in the
+test file when the image uses a different layout (e.g. a partitioned btrfs
+image with root on `/dev/vda3`). Leave it unset (the
 default, `0`) only for build-only tests that never boot. k-lab does not provision
 the image — set it up with everything a test needs beforehand, e.g. with
 [kiwi](https://osinside.github.io/kiwi/), `virt-builder`, or a converted cloud

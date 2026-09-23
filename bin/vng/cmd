@@ -103,6 +103,8 @@ chmod +x "$ssh_helper"
 set \
 	-- \
 	--root-disk "$VNG_ROOT_DISK" \
+	--root-dev "${VNG_ROOT_DEV:-/dev/vda}" \
+	--root-fstype "${VNG_ROOT_FSTYPE:-ext4}" \
 	--rw \
 	--user root \
 	--verbose \
