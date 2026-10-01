@@ -1,77 +1,12 @@
 #!/usr/bin/env bash
+set -e
 
-THIS_DIR=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")
-
-die() {
-	echo "ERROR: $*" >&2
-	exit 1
-}
-
-# shellcheck disable=SC1091
-if ! source "$THIS_DIR/bin/env.sh"; then
-	exit 1
-fi
-if ! require_linux_git; then
-	exit 1
-fi
-
-link_ktest() {
-	local target=$LINUX_GIT/tools/testing/ktest
-
-	[[ -d $target ]] || die "missing ktest directory: $target"
-	mkdir -p -- "$TOOLS_DIR"
-
-	if [[ -e $KTEST_DIR && ! -L $KTEST_DIR ]]; then
-		die "KTEST_DIR exists but is not a symlink: $KTEST_DIR"
-	fi
-
-	ln -sfn -- "$target" "$KTEST_DIR"
-}
-
-clone_vng() {
-	if [[ -e $VNG_DIR && ! -d $VNG_DIR ]]; then
-		die "VNG_DIR exists but is not a directory: $VNG_DIR"
-	fi
-	if [[ ! -d $VNG_DIR ]]; then
-		mkdir -p -- "$(dirname -- "$VNG_DIR")"
-		git clone --single-branch https://github.com/arighi/virtme-ng "$VNG_DIR"
-	fi
-	if [[ ! -f $VNG_DIR/Makefile ]]; then
-		die "virtme-ng checkout looks incomplete: $VNG_DIR"
-	fi
-}
-
-clone_busybox_builder() {
-	if [[ -e $BUSYBOX_DIR && ! -d $BUSYBOX_DIR ]]; then
-		die "BUSYBOX_DIR exists but is not a directory: $BUSYBOX_DIR"
-	fi
-	if [[ ! -d $BUSYBOX_DIR ]]; then
-		mkdir -p -- "$(dirname -- "$BUSYBOX_DIR")"
-		git clone --single-branch https://github.com/rbmarliere/busybox-static-builder "$BUSYBOX_DIR"
-	fi
-	if [[ ! -f $BUSYBOX_DIR/build ]]; then
-		die "busybox-static-builder checkout looks incomplete: $BUSYBOX_DIR"
-	fi
-}
-
-for cmd in git ln make; do
-	if ! command -v "$cmd" >/dev/null 2>&1; then
-		die "missing required command: $cmd"
-	fi
-done
-
-mkdir -p -- "$TOOLS_DIR"
-link_ktest
-clone_vng
-clone_busybox_builder
-./tools/busybox-static-builder/prepare
-./tools/busybox-static-builder/build
-cat <<EOF
-
-Setup complete.
-
-Load the kt shell wrapper and completion with:
-  source "$THIS_DIR/k-lab.sh"
-
-Add that line to your shell rc file if you want it by default.
-EOF
+dir=$(dirname -- "$(realpath -- "$0")")
+linux=$(awk '/^[[:space:]]*LINUX_GIT[[:space:]]*:=/ {sub(/^[^:]*:=[[:space:]]*/, ""); print; exit}' "$dir/setup.conf")
+mkdir -p "$dir/tools"
+ln -sfnT "$linux/tools/testing/ktest" "$dir/tools/ktest"
+[[ -e $dir/tools/virtme-ng ]] ||
+	git clone https://github.com/arighi/virtme-ng "$dir/tools/virtme-ng"
+[[ -e $dir/tools/busybox-static-builder ]] ||
+	git clone https://github.com/rbmarliere/busybox-static-builder "$dir/tools/busybox-static-builder"
+printf 'Build a static busybox, then source %s/k-lab.sh\n' "$dir"
