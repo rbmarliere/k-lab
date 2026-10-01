@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -e
+
+bin=$(dirname -- "$(realpath -- "$0")")
+kernel=${1:?usage: vng <kernel> <root-disk> [vng-args...]}
+disk=${2:?usage: vng <kernel> <root-disk> [vng-args...]}
+shift 2
+arch=${ARCH:-$(uname -m)}
+
+exec "${VNG:-$bin/../tools/virtme-ng/vng}" --run "$kernel" \
+	--root-disk "$disk" \
+	--root-dev "${VNG_ROOT_DEV:-/dev/vda}" \
+	--root-fstype "${VNG_ROOT_FSTYPE:-ext4}" \
+	--arch "$("$bin/cross" vng-arch "$arch")" \
+	--busybox "${BUSYBOX:-$("$bin/cross" busybox-path "$arch")}" \
+	--user root --verbose --network user \
+	--rw --qemu-opts="${VNG_QEMU_OPTS-}" "$@"

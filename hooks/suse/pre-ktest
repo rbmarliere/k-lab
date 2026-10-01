@@ -5,7 +5,7 @@ PATCHLEVEL=${PATCHLEVEL-}
 
 "$BIN"/cross suse-arch "${ARCH-}" >/dev/null
 
-OUTPUT="$TMP_DIR"/suse-min.config
+OUTPUT="$TMP_DIR"/min.config
 touch "$OUTPUT"
 
 if [[ -n $VERSION || -n $PATCHLEVEL ]]; then

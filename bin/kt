@@ -52,6 +52,7 @@ if [[ -z $id ]]; then
 	id=$(printf '%s' "${tree##*/}-$name" | tr -c 'A-Za-z0-9_.-' '_')
 fi
 state=${state:-$dir/tmp/$id}
+state=$(realpath -m -- "$state")
 args+=(-D "THIS_DIR:=$dir" -D "KLAB_ID:=$id" -D "TMP_DIR=$state")
 
 if ((dry_run)); then
@@ -63,10 +64,15 @@ flock -n 9 || {
 	echo "workspace in use: $state" >&2
 	exit 1
 }
+link=$PWD/ssh-${state##*/}
 cleanup() {
 	kill -TERM -- "-$pid" 2>/dev/null || true
 	wait "$pid" 2>/dev/null || true
-	TMP_DIR="$state" BIN="$dir/bin" "$dir/bin/vng/stop-vm" -f
+	TMP_DIR="$state" "$dir/bin/vm" stop
+	if [[ -L $link && $(readlink -- "$link") == "$state/ssh" ]]; then
+		rm -- "$link"
+	fi
+	rm -f -- "$state/pid"
 }
 cancel() {
 	kill -INT -- "-$pid" 2>/dev/null || true
@@ -76,6 +82,11 @@ cancel() {
 trap cleanup EXIT
 trap 'cancel 130' INT
 trap 'cancel 143' TERM
+printf '%s\n' "$$" >"$state/pid"
+if [[ ! -L $link || $(readlink -- "$link") != "$state/ssh" ]]; then
+	ln -sT -- "$state/ssh" "$link"
+fi
+printf 'SSH helper: %s\n' "$link"
 if ((noninteractive)); then
 	[[ -p $state/stdin ]] || mkfifo "$state/stdin"
 	exec 0<>"$state/stdin"

@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -e
+
+bin=$(dirname -- "$(realpath -- "$0")")
+state=${TMP_DIR:?TMP_DIR is required}
+VNG=${VNG:-$bin/../tools/virtme-ng/vng}
+export HOME=$state/home
+
+stop() {
+	[[ -f $state/vm.pid ]] || return 0
+	local pid
+	pid=$(<"$state/vm.pid")
+	kill -TERM -- "-$pid" 2>/dev/null || true
+	for ((i = 0; i < 20; i++)); do
+		kill -0 -- "-$pid" 2>/dev/null || break
+		sleep 0.1
+	done
+	kill -KILL -- "-$pid" 2>/dev/null || true
+	rm -f -- "$state/vm.pid"
+}
+
+command=${1:?usage: vm <start|stop|console|exec>}
+shift
+case $command in
+start)
+	stop
+	mkdir -p "$HOME"
+	printf '#!/usr/bin/env bash\nexec env TMP_DIR=%q VNG=%q VNG_PORT=%q %q exec "$@"\n' \
+		"$state" "$VNG" "${VNG_PORT:-22000}" "$bin/vm" >"$state/ssh"
+	chmod +x "$state/ssh"
+	setsid "$0" run "$@" </dev/null >"$state/vnglog" 2>&1 &
+	echo $! >"$state/vm.pid"
+	;;
+run)
+	exec "$bin/vng" "$OUTPUT_DIR" "${ROOT_DISK:?ROOT_DISK is required for VM boots}" \
+		--rodir "$BUILD_DIR=$BUILD_DIR" --rwdir "$OUTPUT_DIR=$OUTPUT_DIR" \
+		--ssh-tcp --ssh "${VNG_PORT:-22000}" --memory "${VNG_MEM:-1G}" \
+		"$@" -- sleep infinity
+	;;
+console)
+	touch "$state/vnglog"
+	exec tail -n 0 -F -s 0.1 -- "$state/vnglog"
+	;;
+exec)
+	exec "$VNG" --user root --ssh-tcp --ssh-client "${VNG_PORT:-22000}" -- "$@"
+	;;
+stop) stop ;;
+*) echo "unknown VM command: $command" >&2; exit 2 ;;
+esac

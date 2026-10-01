@@ -1,8 +1,0 @@
-#!/usr/bin/env bash
-
-for f in "$TMP_DIR"/*-min.config; do
-	[[ -r $f ]] || continue
-	cat "$f" >>"$TMP_DIR"/min.config
-done
-
-ln -sf "$OUTPUT_DIR"/.config "$TMP_DIR"/.config

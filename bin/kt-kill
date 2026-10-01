@@ -1,65 +1,11 @@
 #!/usr/bin/env bash
-# Kill all k-lab, ktest.pl, vng, and qemu processes associated with a specific TMP_DIR
+set -e
 
-if [ "$#" -ne 1 ]; then
-    echo "usage: $(basename $0) <TMP_DIR>"
-    exit 1
-fi
-
-# Remove trailing slash if present and extract the base directory name
-TMP_DIR="${1%/}"
-KLAB_ID="$(basename "$TMP_DIR")"
-
-if [ -z "$KLAB_ID" ] || [ "$KLAB_ID" = "tmp" ] || [ "$KLAB_ID" = "k-lab" ]; then
-    echo "Error: Invalid TMP_DIR provided ($TMP_DIR)."
-    exit 1
-fi
-
-echo "Searching for processes associated with: $KLAB_ID"
-
-# pgrep -f matches the KLAB_ID anywhere in the command line arguments.
-# This successfully catches:
-#   - ktest.pl (has -D KLAB_ID:=...)
-#   - qemu-system-x86_64 (has -fsdev ... path=$TMP_DIR/build...)
-#   - vng/virtme-run (has --run $TMP_DIR/build...)
-#   - Background log tailers or bash wrappers referencing the TMP_DIR
-
-PIDS=$(pgrep -f "$KLAB_ID" || true)
-
-# Exclude the script's own PID and parent PID to prevent self-termination
-MY_PID=$$
-MY_PPID=$PPID
-
-TO_KILL=""
-for p in $PIDS; do
-    if [ "$p" != "$MY_PID" ] && [ "$p" != "$MY_PPID" ]; then
-        TO_KILL="$TO_KILL $p"
-    fi
-done
-
-if [ -z "$TO_KILL" ]; then
-    echo "No associated processes found."
-    exit 0
-fi
-
-echo "Found associated PIDs:"
-ps -o pid,user,args -p $TO_KILL | sed 's/^/  /'
-
-echo -e "\nSending SIGTERM..."
-kill $TO_KILL 2>/dev/null
-sleep 2
-
-# Check if any processes stubbornly survived and hit them with SIGKILL
-ALIVE=""
-for p in $TO_KILL; do
-    if kill -0 "$p" 2>/dev/null; then
-        ALIVE="$ALIVE $p"
-    fi
-done
-
-if [ -n "$ALIVE" ]; then
-    echo "Sending SIGKILL to remaining processes: $ALIVE"
-    kill -9 $ALIVE 2>/dev/null
-fi
-
-echo "Cleanup complete."
+state=${1:?usage: kt-kill <workspace>}
+pid=
+read -r pid 2>/dev/null <"$state/pid" || true
+[[ $pid =~ ^[1-9][0-9]*$ && $pid -gt 1 && /proc/$pid/fd/9 -ef $state/lock ]] || {
+	echo "no active ktest run: $state" >&2
+	exit 1
+}
+kill -TERM -- "$pid"

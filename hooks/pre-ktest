@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
+set -e
 
-rm -f -- "$TMP_DIR"/*min.config
-: >"$TMP_DIR"/min.config
-
-ln -sfnT "$TMP_DIR" "$BUILD_DIR"/tmp-"$VNG_PORT"
+"$BIN/min-config" "$TMP_DIR/min.config" "$ARCH"

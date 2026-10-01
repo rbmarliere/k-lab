@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-
-cd "$OUTPUT_DIR"
-[[ -f modules.order ]] || exit 0
-
-"$VNG_DIR"/bin/virtme-prep-kdir-mods

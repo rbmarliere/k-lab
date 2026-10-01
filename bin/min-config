@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
-"$VNG_DIR/vng" --arch "$("$BIN/cross" vng-arch "${2:-x86_64}")" \
+"$VNG" --arch "$("$BIN/cross" vng-arch "${2:-x86_64}")" \
 	--kconfig --dry-run --configitem MODULES=y |
 	awk '/^CONFIG_[A-Za-z0-9_]+=/' >"${1:?usage: min-config <output> <arch>}"
