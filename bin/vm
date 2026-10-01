@@ -45,5 +45,8 @@ exec)
 	exec "$VNG" --cwd /mnt/build --user root --ssh-tcp --ssh-client "${VNG_PORT:-22000}" -- "$@"
 	;;
 stop) stop ;;
-*) echo "unknown VM command: $command" >&2; exit 2 ;;
+*)
+	echo "unknown VM command: $command" >&2
+	exit 2
+	;;
 esac
