@@ -153,7 +153,9 @@ work; create task-specific tests instead. For example:
 
 ```bash
 kt -D TEST:=boot tumbleweed
+kt -D TEST:=manual tumbleweed
 ```
 
+`manual` keeps the VM running for interactive SSH access; Ctrl-C ends the run.
 The sample's `TEST` selector uses `:=`. Override `ROOT_DISK` and `CHROOT` for
 your machine.
