@@ -1,18 +1,5 @@
 #!/usr/bin/env bash
 
-SCRIPT_DIR=$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")
-
-# shellcheck disable=SC1091
-source "$SCRIPT_DIR/../bin/env.sh"
-
-if [[ ${ROOT_DISK-} == 0 ]]; then
-	unset ROOT_DISK
-elif [[ -n ${ROOT_DISK-} ]]; then
-	resolve_root_disk || exit 1
-fi
-
-"$BIN"/write-env
-
 rm -f -- "$TMP_DIR"/*min.config
 : >"$TMP_DIR"/min.config
 

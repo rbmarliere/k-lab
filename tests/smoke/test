@@ -3,12 +3,9 @@
 # shared include/selftests-bpf.conf profile, each as a separate TEST value so
 # they can be run independently.
 #
-# CHROOT and ROOT_DISK are parse-time (":=") variables, so they must be set
-# here, before INCLUDE, never inside a TEST_START (see README.md). Both
-# default to the shared Tumbleweed x86_64 rootfs/image; override per run with
-# -D CHROOT:=/some/other/rootfs or -D ROOT_DISK:=/some/other/image.img.
-CHROOT := /roots/suse/Tumbleweed/x86_64
-ROOT_DISK := /roots/suse/Tumbleweed/x86_64.img
+# Override these defaults with -D CHROOT=... or -D ROOT_DISK=....
+CHROOT = /roots/suse/Tumbleweed/x86_64
+ROOT_DISK = /roots/suse/Tumbleweed/x86_64.img
 
 INCLUDE ../../include/defaults.conf
 

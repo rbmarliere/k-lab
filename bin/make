@@ -1,19 +1,6 @@
 #!/usr/bin/env bash
 
-build_options=${BUILD_OPTIONS-}
-for arg in "$@"; do
-	case "$arg" in
-	clean | mrproper | distclean)
-		build_options=
-		break
-		;;
-	esac
-done
-
 make_cmd=(make)
-if [[ -n $build_options ]]; then
-	make_cmd+=("$build_options")
-fi
 make_cmd+=(-C "$BUILD_DIR" O="$OUTPUT_DIR")
 if [[ -n ${ARCH-} ]]; then
 	make_cmd+=("ARCH=$ARCH")

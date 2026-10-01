@@ -8,4 +8,5 @@ targets=${1:?usage: post-build <selftests TARGETS, e.g. "bpf" or "net net/forwar
 
 "$BIN"/make headers
 git -C tools/testing/selftests clean -fdx
-"$BIN"/make -C tools/testing/selftests SKIP_TARGETS= TARGETS="$targets" install
+read -r -a options <<<"${BUILD_OPTIONS-}"
+"$BIN"/make "${options[@]}" -C tools/testing/selftests SKIP_TARGETS= TARGETS="$targets" install
