@@ -5,7 +5,6 @@ dir=$(dirname -- "$(dirname -- "$(realpath -- "$0")")")
 args=()
 dry_run=0
 noninteractive=0
-id=
 state=
 while getopts ':CD:hny' opt; do
 	case $opt in
@@ -13,7 +12,6 @@ while getopts ':CD:hny' opt; do
 	D)
 		args+=(-D "$OPTARG")
 		case $OPTARG in
-		KLAB_ID:=*) id=${OPTARG#*:=} ;;
 		TMP_DIR:=*) state=${OPTARG#*:=} ;;
 		TMP_DIR=*) state=${OPTARG#*=} ;;
 		esac
@@ -46,14 +44,14 @@ fi
 	exit 1
 }
 file=$(realpath -- "$file")
-if [[ -z $id ]]; then
+if [[ -z $state ]]; then
 	tree=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 	name=${file#"$dir/"}
-	id=$(printf '%s' "${tree##*/}-$name" | tr -c 'A-Za-z0-9_.-' '_')
+	name=$(printf '%s' "${tree##*/}-$name" | tr -c 'A-Za-z0-9_.-' '_')
+	state=$dir/tmp/$name
 fi
-state=${state:-$dir/tmp/$id}
 state=$(realpath -m -- "$state")
-args+=(-D "THIS_DIR:=$dir" -D "KLAB_ID:=$id" -D "TMP_DIR=$state")
+args+=(-D "THIS_DIR:=$dir" -D "TMP_DIR=$state")
 
 if ((dry_run)); then
 	exec "$dir/tools/ktest/ktest.pl" "${args[@]}" --dry-run "$file"
