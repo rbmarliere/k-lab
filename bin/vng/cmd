@@ -15,28 +15,6 @@ if [[ ! -f $VNG_ROOT_DISK ]]; then
 	exit 1
 fi
 
-vng_arg_arch() {
-	local i arg
-
-	for ((i = 0; i < ${#pre_args[@]}; i++)); do
-		arg=${pre_args[$i]}
-		case "$arg" in
-		--arch=*)
-			printf '%s\n' "${arg#--arch=}"
-			return 0
-			;;
-		--arch)
-			if ((i + 1 < ${#pre_args[@]})); then
-				printf '%s\n' "${pre_args[$((i + 1))]}"
-				return 0
-			fi
-			;;
-		esac
-	done
-
-	return 1
-}
-
 # Split the caller's remaining args at the first literal "--": everything
 # before it are vng flags, everything after (if anything) is the command
 # the caller wants to run.
@@ -55,26 +33,11 @@ for arg in "$@"; do
 	fi
 done
 
-requested_arch=${ARCH-}
-if [[ -z $requested_arch ]]; then
-	requested_arch=$(vng_arg_arch || true)
-fi
-
-# Falls back to inferring the arch from the disk image's filename (e.g.
-# aarch64.img -> arm64) when neither ARCH nor a forwarded --arch was given.
-resolved_arch=$("$BIN"/cross resolve-arch "$VNG_ROOT_DISK" "$requested_arch")
-"$BIN"/cross preflight-vng "$VNG_ROOT_DISK" "$resolved_arch"
-
+resolved_arch=$("$BIN"/cross normalize-arch "${ARCH:-x86_64}")
 arch_args=(
 	--busybox "$("$BIN"/cross busybox-path "$resolved_arch")"
+	--arch "$("$BIN"/cross vng-arch "$resolved_arch")"
 )
-if "$BIN"/cross is-foreign "$resolved_arch"; then
-	cross_compile=$("$BIN"/cross cross-compile "$resolved_arch")
-	arch_args+=(--arch "$("$BIN"/cross vng-arch "$resolved_arch")")
-	if [[ -n $cross_compile ]]; then
-		arch_args+=(--cross-compile "$cross_compile")
-	fi
-fi
 
 vng_port=${VNG_PORT:-$((22000 + RANDOM % 1001))}
 if [[ -n ${TMP_DIR-} ]]; then

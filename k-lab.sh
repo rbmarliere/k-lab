@@ -189,7 +189,7 @@ _kt_preflight_chroot() {
 		return 1
 	fi
 
-	"$BIN"/cross preflight-chroot "$chroot_dir"
+	[[ -d $chroot_dir ]]
 }
 
 _kt_confirm() {

@@ -19,8 +19,7 @@ and this [tutorial](<https://elinux.org/images/f/fd/Automated_Testing_with_ktest
 
 Optional in `setup.conf`: `KSOURCE_GIT` (SUSE configs), `TEST_DIRS`
 (colon-separated extra test roots for `kt` lookup and completion; relative
-paths resolve from `THIS_DIR`), and per-arch `CROSS_COMPILE_*` / `CHROOT_*`
-overrides. `CROSS_COMPILE` and `CHROOT` can also be set per test under `tests/`.
+paths resolve from `THIS_DIR`), and direct `CROSS_COMPILE` / `CHROOT` settings. `CROSS_COMPILE` and `CHROOT` can also be set per test under `tests/`.
 
 Bootstrap:
 
@@ -47,8 +46,8 @@ kt -C -D BUILD_TYPE=defconfig
 # override target/host compiler and ssh port
 kt -D CC=gcc-13 -D VNG_PORT:=22001 -D TEST:=boot smoke/test
 
-# boot a foreign-arch image for one run; ARCH is inferred from the filename
-kt -D ROOT_DISK:=/roots/suse/Tumbleweed/aarch64.img -D TEST:=boot smoke/test
+# boot a foreign-arch image for one run
+kt -D ARCH:=arm64 -D ROOT_DISK:=/roots/suse/Tumbleweed/aarch64.img -D TEST:=boot smoke/test
 
 # build inside a target rootfs's own chroot, then boot a matching image
 kt -D CHROOT:=/roots/suse/Tumbleweed/aarch64 -D CHROOT_BUILD=1 \
@@ -154,8 +153,8 @@ Use `:=` for parse-time variables that affect file composition or derived paths.
 Set them at the top level, **never inside `TEST_START`**:
 
 - `ROOT_DISK`, `ARCH`, `VNG_PORT`, `TEST`
-- `CHROOT` (and its per-arch `CHROOT_*` inputs)
-- `CROSS_COMPILE` (and its per-arch `CROSS_COMPILE_*` inputs; unused when
+- `CHROOT`
+- `CROSS_COMPILE` (unused when
   `CHROOT_BUILD=1`, since the chroot uses its own native toolchain)
 
 Use `=` for normal runtime options: `BUILD_TYPE`, `ADD_CONFIG`, `CC`, `HOSTCC`,
@@ -227,9 +226,8 @@ the image — set it up with everything a test needs beforehand, e.g. with
 [kiwi](https://osinside.github.io/kiwi/), `virt-builder`, or a converted cloud
 image; it just needs a plain ext4 filesystem virtme-ng can mount.
 
-If `ARCH` is not set explicitly, it is inferred from `ROOT_DISK`'s filename:
-`aarch64.img`/`arm64.img` → `arm64`, `s390x.img` → `s390`,
-`ppc64le.img`/`ppc64.img` → `powerpc`, etc.
+`ARCH` defaults to the host architecture. Set it explicitly for another target; neither
+disk names nor chroot binaries determine the architecture.
 
 Every VM boot needs a matching static busybox; build it first, e.g.
 `./bin/setup/build-busybox x86_64`.
@@ -251,13 +249,8 @@ directories under `TMP_DIR`, and binds in `BUILD_DIR` and `OUTPUT_DIR`.
 The overlay changes persist across commands; mounts disappear when the command
 exits. `CHROOT` itself is never modified.
 
-Per-arch `CHROOT_*` in `setup.conf` let `CHROOT` be picked from `ARCH` (like
-`CROSS_COMPILE_*`); `-D CHROOT:=...` overrides that. `CHROOT` is unrelated to
-`ROOT_DISK` — the build chroot need not match the booted image. If `ARCH` is not
-set explicitly, cannot be inferred from `ROOT_DISK`, and `CHROOT` is set
-explicitly (in the test file or via `-D CHROOT:=`), `ARCH` is inferred by
-inspecting an ELF binary under `CHROOT` (chroot directories have no filename
-convention to rely on).
+`CHROOT` is independent of `ROOT_DISK`; the build directory and guest image
+need not be from the same distro. Set `ARCH` explicitly for foreign chroots.
 
 #### Creating rootfs directories
 
