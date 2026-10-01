@@ -51,7 +51,7 @@ if [[ -z $state ]]; then
 	state=$dir/tmp/$name
 fi
 state=$(realpath -m -- "$state")
-args+=(-D "THIS_DIR:=$dir" -D "TMP_DIR=$state")
+args=(-D "MACHINE=${state##*/}" "${args[@]}" -D "THIS_DIR:=$dir" -D "TMP_DIR=$state")
 
 if ((dry_run)); then
 	exec "$dir/tools/ktest/ktest.pl" "${args[@]}" --dry-run "$file"
