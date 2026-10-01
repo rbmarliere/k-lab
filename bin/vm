@@ -4,7 +4,7 @@ set -e
 bin=$(dirname -- "$(realpath -- "$0")")
 state=${TMP_DIR:?TMP_DIR is required}
 VNG=${VNG:-$bin/../tools/virtme-ng/vng}
-export HOME=$state/home
+export HOME=$state/home TMPDIR=$state
 
 stop() {
 	[[ -f $state/vm.pid ]] || return 0

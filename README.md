@@ -306,3 +306,8 @@ the invoking user mapped to `0`), so a build that branches on
 - `bin/setup/` — setup-time helpers
 - `config/` — extra kernel config fragments
 - `tools/` — repo-local tool state (ktest link, virtme-ng, busybox)
+
+VM disks use QEMU temporary snapshots by default. Guests can write, but disk
+changes disappear when the VM stops. Set `VNG_QEMU_OPTS =` to disable snapshots
+and write directly to the base image; do not share that image between concurrent
+writable guests. Source exports are read-only; outputs are writable.
