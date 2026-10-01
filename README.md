@@ -67,9 +67,16 @@ Run from the kernel worktree, selecting your task's test:
 kt -n my-test                          # resolved options only
 kt my-test                             # build and run the configured test
 kt -C my-test                          # rebuild without cleaning
-kt -D COMPILE_COMMANDS=1 my-test        # database in OUTPUT_DIR
-kt -D ARCH:=arm64 -D CROSS_COMPILE=/path/to/aarch64-linux-gnu- my-test
+kt -D COMPILE_COMMANDS=0 my-test       # skip compile_commands.json
+kt -D ARCH:=arm64 \
+   -D CROSS_COMPILE=/path/to/aarch64-linux-gnu- \
+   my-test
 ```
+
+`compile_commands.json` is generated in `OUTPUT_DIR` by default and linked
+from the kernel source directory (`BUILD_DIR`). The latest build selects the
+active database. Set `COMPILE_COMMANDS=0` to disable generation and leave any
+existing link unchanged.
 
 Without a test argument, `kt` performs a host defconfig build. Test arguments
 may be names under `tests/`, paths to configs, or directories containing a
