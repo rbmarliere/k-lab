@@ -147,12 +147,12 @@ qemu-user/binfmt registration.
 
 ## Sample
 
-`tests/smoke` demonstrates build, boot, chroot, and BPF modes with Tumbleweed
+`tests/tumbleweed` demonstrates build, boot, chroot, and BPF modes with Tumbleweed
 x86_64 image/rootfs paths. It is a sample, not the entrypoint for unrelated
 work; create task-specific tests instead. For example:
 
 ```bash
-kt -D TEST:=boot smoke
+kt -D TEST:=boot tumbleweed
 ```
 
 The sample's `TEST` selector uses `:=`. Override `ROOT_DISK` and `CHROOT` for
