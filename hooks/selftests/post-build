@@ -1,12 +1,8 @@
 #!/usr/bin/env bash
+set -e
 
-# Generic kselftest installer: builds and installs the given TARGETS
-# (tools/testing/selftests/Makefile collection names, e.g. "bpf" or
-# "net net/forwarding" as a single argument) from a freshly built kernel tree.
-# Runs with cwd = BUILD_DIR (ktest.pl chdir's there before POST_BUILD).
-targets=${1:?usage: post-build <selftests TARGETS, e.g. "bpf" or "net net/forwarding">}
-
-"$BIN"/make headers
-git -C tools/testing/selftests clean -fdx
+targets=${1:?usage: post-build <selftest collections>}
 read -r -a options <<<"${BUILD_OPTIONS-}"
-"$BIN"/make "${options[@]}" -C tools/testing/selftests SKIP_TARGETS= TARGETS="$targets" install
+"$BIN/make" headers
+"$BIN/make" "${options[@]}" -C tools/testing/selftests \
+	SKIP_TARGETS= TARGETS="$targets" FORCE_TARGETS=1 install
