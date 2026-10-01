@@ -33,7 +33,7 @@ start)
 	;;
 run)
 	exec "$bin/vng" "$OUTPUT_DIR" "${ROOT_DISK:?ROOT_DISK is required for VM boots}" \
-		--rodir "$BUILD_DIR=$BUILD_DIR" --rwdir "$OUTPUT_DIR=$OUTPUT_DIR" \
+		--rodir "/mnt/src=$BUILD_DIR" --rwdir "/mnt/build=$OUTPUT_DIR" \
 		--ssh-tcp --ssh "${VNG_PORT:-22000}" --memory "${VNG_MEM:-1G}" \
 		"$@" -- sleep infinity
 	;;
@@ -42,7 +42,7 @@ console)
 	exec tail -n 0 -F -s 0.1 -- "$state/vnglog"
 	;;
 exec)
-	exec "$VNG" --cwd / --user root --ssh-tcp --ssh-client "${VNG_PORT:-22000}" -- "$@"
+	exec "$VNG" --cwd /mnt/build --user root --ssh-tcp --ssh-client "${VNG_PORT:-22000}" -- "$@"
 	;;
 stop) stop ;;
 *) echo "unknown VM command: $command" >&2; exit 2 ;;
