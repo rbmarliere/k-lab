@@ -42,7 +42,7 @@ console)
 	exec tail -n 0 -F -s 0.1 -- "$state/vnglog"
 	;;
 exec)
-	exec "$VNG" --user root --ssh-tcp --ssh-client "${VNG_PORT:-22000}" -- "$@"
+	exec "$VNG" --cwd / --user root --ssh-tcp --ssh-client "${VNG_PORT:-22000}" -- "$@"
 	;;
 stop) stop ;;
 *) echo "unknown VM command: $command" >&2; exit 2 ;;

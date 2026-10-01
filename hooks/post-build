@@ -1,13 +1,10 @@
 #!/usr/bin/env bash
+set -e
 
 [[ ${COMPILE_COMMANDS:-0} == 1 ]] || exit 0
-
-arch=${ARCH:-x86_64}
-db=$BUILD_DIR/compile_commands-$arch-$VNG_PORT.json
-
-if [[ -e "$BUILD_DIR"/scripts/clang-tools/gen_compile_commands.py ]]; then
-	"$BUILD_DIR"/scripts/clang-tools/gen_compile_commands.py \
-		-d "$OUTPUT_DIR" \
-		-o "$db"
-	ln -sfnT "$(basename -- "$db")" "$BUILD_DIR"/compile_commands.json
+"$BUILD_DIR/scripts/clang-tools/gen_compile_commands.py" \
+	-d "$OUTPUT_DIR" -o "$OUTPUT_DIR/compile_commands.json"
+if [[ ! "$BUILD_DIR" -ef "$OUTPUT_DIR" ]]; then
+	ln -sfnT "$(realpath -- "$OUTPUT_DIR/compile_commands.json")" \
+		"$BUILD_DIR/compile_commands.json"
 fi

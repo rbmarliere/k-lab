@@ -1,12 +1,3 @@
-# Smoke test for the k-lab framework itself: exercises the base build path,
-# booting a disk image, building inside a CHROOT via CHROOT_BUILD=1, and the
-# shared include/selftests-bpf.conf profile, each as a separate TEST value so
-# they can be run independently.
-#
-# Override these defaults with -D CHROOT=... or -D ROOT_DISK=....
-CHROOT = /roots/suse/Tumbleweed/x86_64
-ROOT_DISK = /roots/suse/Tumbleweed/x86_64.img
-
 INCLUDE ../../include/defaults.conf
 
 DEFAULTS IF NOT DEFINED TEST
@@ -14,48 +5,26 @@ TEST := build
 
 DEFAULTS IF ${TEST} == bpf
 INCLUDE ../../include/selftests-bpf.conf
-DEFAULTS
 
 DEFAULTS OVERRIDE
-BUILD_TYPE = defconfig
+ROOT_DISK = /roots/suse/Tumbleweed/x86_64.img
+CHROOT = /roots/suse/Tumbleweed/x86_64
 
-# build: plain host build, no VM boot, no chroot -- the fastest sanity check
-# that the k-lab -> ktest.pl -> make plumbing works. No overrides needed.
 TEST_START IF ${TEST} == build
 TEST_TYPE = build
 
-# boot: also boot ROOT_DISK (the Tumbleweed x86_64 image above by default;
-# override with -D ROOT_DISK:=/path/to/<arch>.img) and confirm the guest is
-# up and matches the expected ARCH. Compares against KLAB_UNAME_ARCH (see
-# include/cross.conf), not ARCH itself: a booted guest's `uname -m` reports
-# its real machine name (e.g. "aarch64"), not k-lab's ARCH name ("arm64").
 TEST_START IF ${TEST} == boot
 TEST_TYPE = test
-TEST_BIN = uname -m | grep -qx ${KLAB_UNAME_ARCH} && test -b /dev/vda
-TEST = ${DO_TEST_SIMPLE}
+TEST = ${SSH} sh -c 'uname -m | grep -qx ${KLAB_UNAME_ARCH} && test -b /dev/vda'
 
-# chroot: build inside CHROOT (the Tumbleweed x86_64 rootfs above by
-# default) via CHROOT_BUILD=1, using CHROOT's own native toolchain (see
-# include/cross.conf, bin/chroot/*) instead of the host's. No boot.
 TEST_START IF ${TEST} == chroot
 TEST_TYPE = build
 CHROOT_BUILD = 1
 
-# chroot-boot: same chrooted build as "chroot", then boot a matching
-# ROOT_DISK (the default above already matches CHROOT's arch/distro; override
-# both together with -D CHROOT:=... -D ROOT_DISK:=... to test another one)
-# and confirm the guest booted off it. See the "boot" case above for why
-# this compares against KLAB_UNAME_ARCH rather than ARCH itself.
 TEST_START IF ${TEST} == chroot-boot
 TEST_TYPE = test
 CHROOT_BUILD = 1
-TEST_BIN = uname -m | grep -qx ${KLAB_UNAME_ARCH} && test -b /dev/vda
-TEST = ${DO_TEST_SIMPLE}
+TEST = ${SSH} sh -c 'uname -m | grep -qx ${KLAB_UNAME_ARCH} && test -b /dev/vda'
 
-# bpf: exercises the shared include/selftests-bpf.conf profile end to end
-# (build+install the "bpf" kselftest collection, boot, run one self-contained
-# subtest) against the default ROOT_DISK above.
 TEST_START IF ${TEST} == bpf
-TEST_TYPE = test
 TEST_BIN = ./test_progs -vv -t btf
-TEST = ${DO_TEST_SIMPLE}

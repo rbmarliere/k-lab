@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
+set -e
 
 VERSION=${VERSION-}
 PATCHLEVEL=${PATCHLEVEL-}
 
-"$BIN"/cross suse-arch "${ARCH-}" >/dev/null
-
 OUTPUT="$TMP_DIR"/min.config
-touch "$OUTPUT"
 
 if [[ -n $VERSION || -n $PATCHLEVEL ]]; then
 	if [[ -z $VERSION || -z $PATCHLEVEL ]]; then
