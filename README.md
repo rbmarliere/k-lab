@@ -245,11 +245,11 @@ when an older kernel needs an older compiler shipped only in an older rootfs.
 Foreign arches run transparently via the host's `qemu-user`/`binfmt_misc`, so
 `CHROOT` can be any arch.
 
-Each run gets its own private, writable overlay over `CHROOT`
-(`lowerdir=CHROOT`, per-run `upperdir`/`workdir` under `TMP_DIR`), so concurrent
-runs sharing a `CHROOT` never write to the same path and `CHROOT` itself is
-never modified; `BUILD_DIR` and `OUTPUT_DIR` are bind-mounted in at matching
-paths so the chrooted build sees the same source tree and `OUTPUT_DIR`.
+Each make command runs in its own unprivileged user, mount, and PID
+namespace. It mounts a writable overlay over `CHROOT`, with upper/work
+directories under `TMP_DIR`, and binds in `BUILD_DIR` and `OUTPUT_DIR`.
+The overlay changes persist across commands; mounts disappear when the command
+exits. `CHROOT` itself is never modified.
 
 Per-arch `CHROOT_*` in `setup.conf` let `CHROOT` be picked from `ARCH` (like
 `CROSS_COMPILE_*`); `-D CHROOT:=...` overrides that. `CHROOT` is unrelated to

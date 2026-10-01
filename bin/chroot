@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -e
+
+if [[ ${1-} != --mounted ]]; then
+	CHROOT=$(realpath -e -- "${CHROOT:?CHROOT is required}")
+	TMP_DIR=$(realpath -m -- "${TMP_DIR:?TMP_DIR is required}")
+	export CHROOT TMP_DIR
+	mkdir -p "$TMP_DIR"/chroot/{upper,work,merged}
+	exec unshare --user --map-root-user --mount --pid --fork --kill-child --forward-signals -- \
+		"$0" --mounted "$@"
+fi
+shift
+
+root=$TMP_DIR/chroot/merged
+mount -t overlay overlay \
+	-o "lowerdir=$CHROOT,upperdir=$TMP_DIR/chroot/upper,workdir=$TMP_DIR/chroot/work" "$root"
+mkdir -p "$root"/{proc,dev,sys,tmp}
+mount -t proc proc "$root/proc"
+mount --rbind /dev "$root/dev"
+mount --rbind /sys "$root/sys"
+for dir in "$BUILD_DIR" "$OUTPUT_DIR"; do
+	mount --mkdir --bind "$dir" "$root$dir"
+done
+
+trap 'exit 130' INT
+trap 'exit 143' TERM
+chroot "$root" /usr/bin/env -i \
+	PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+	HOME=/tmp TMPDIR=/tmp USER=root LOGNAME=root \
+	LANG="${LANG:-C}" TERM="${TERM:-dumb}" "$@" <&0 &
+wait "$!"
