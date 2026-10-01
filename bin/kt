@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+set -e
+
+dir=$(dirname -- "$(dirname -- "$(realpath -- "$0")")")
+args=()
+dry_run=0
+noninteractive=0
+id=
+state=
+while getopts ':CD:hny' opt; do
+	case $opt in
+	C) args+=(-D BUILD_NOCLEAN=1) ;;
+	D)
+		args+=(-D "$OPTARG")
+		case $OPTARG in
+		KLAB_ID:=*) id=${OPTARG#*:=} ;;
+		TMP_DIR:=*) state=${OPTARG#*:=} ;;
+		TMP_DIR=*) state=${OPTARG#*=} ;;
+		esac
+		;;
+	n) dry_run=1 ;;
+	y) noninteractive=1 ;;
+	h)
+		echo 'usage: kt [-C] [-D name=value] [-n] [-y] [test]'
+		exit 0
+		;;
+	*)
+		echo 'invalid option; use kt -h' >&2
+		exit 2
+		;;
+	esac
+done
+shift $((OPTIND - 1))
+[[ $# -le 1 ]] || {
+	echo 'expected one test config' >&2
+	exit 2
+}
+
+file=${1:-$dir/include/defaults.conf}
+if [[ ! -e $file ]]; then
+	file=$dir/tests/$file
+fi
+[[ ! -d $file ]] || file=$file/test
+[[ -f $file ]] || {
+	echo "missing config: $file" >&2
+	exit 1
+}
+file=$(realpath -- "$file")
+if [[ -z $id ]]; then
+	tree=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+	name=${file#"$dir/"}
+	id=$(printf '%s' "${tree##*/}-$name" | tr -c 'A-Za-z0-9_.-' '_')
+fi
+state=${state:-$dir/tmp/$id}
+args+=(-D "THIS_DIR:=$dir" -D "KLAB_ID:=$id" -D "TMP_DIR=$state")
+
+if ((dry_run)); then
+	exec "$dir/tools/ktest/ktest.pl" "${args[@]}" --dry-run "$file"
+fi
+mkdir -p -- "$state"
+exec 9>"$state/lock"
+flock -n 9 || {
+	echo "workspace in use: $state" >&2
+	exit 1
+}
+cleanup() {
+	kill -TERM -- "-$pid" 2>/dev/null || true
+	wait "$pid" 2>/dev/null || true
+	TMP_DIR="$state" BIN="$dir/bin" "$dir/bin/vng/stop-vm" -f
+}
+cancel() {
+	kill -INT -- "-$pid" 2>/dev/null || true
+	wait "$pid" 2>/dev/null || true
+	exit "$1"
+}
+trap cleanup EXIT
+trap 'cancel 130' INT
+trap 'cancel 143' TERM
+if ((noninteractive)); then
+	[[ -p $state/stdin ]] || mkfifo "$state/stdin"
+	exec 0<>"$state/stdin"
+fi
+# ktest must not be a session leader when it opens its console PTY.
+setsid bash -c '"$@" <&0 & wait "$!"' kt \
+	"$dir/tools/ktest/ktest.pl" "${args[@]}" "$file" <&0 &
+pid=$!
+wait "$pid"
