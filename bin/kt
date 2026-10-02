@@ -2,12 +2,20 @@
 set -e
 
 dir=$(dirname -- "$(dirname -- "$(realpath -- "$0")")")
+action=run
+if [[ ${1-} == wait || ${1-} == status ]]; then
+	action=$1
+	shift
+fi
 args=()
 dry_run=0
 noninteractive=0
+background=0
+timeout=300
 state=
-while getopts ':CD:hny' opt; do
+while getopts ':bCD:hnyt:' opt; do
 	case $opt in
+	b) background=1; noninteractive=1 ;;
 	C) args+=(-D BUILD_NOCLEAN=1) ;;
 	D)
 		args+=(-D "$OPTARG")
@@ -16,10 +24,12 @@ while getopts ':CD:hny' opt; do
 		TMP_DIR=*) state=${OPTARG#*=} ;;
 		esac
 		;;
+	t) timeout=$OPTARG ;;
 	n) dry_run=1 ;;
 	y) noninteractive=1 ;;
 	h)
-		echo 'usage: kt [-C] [-D name=value] [-n] [-y] [test]'
+		echo 'usage: kt [-b] [-C] [-D name=value] [-n] [-y] [test]'
+		echo '       kt <wait|status> [-t seconds] [-D TMP_DIR=path] [test]'
 		exit 0
 		;;
 	*)
@@ -33,6 +43,15 @@ shift $((OPTIND - 1))
 	echo 'expected one test config' >&2
 	exit 2
 }
+[[ $timeout =~ ^[0-9]+$ ]] || {
+	echo 'timeout must be a nonnegative number of seconds' >&2
+	exit 2
+}
+if [[ $action != run && ( $background == 1 || $dry_run == 1 ) ]] ||
+   [[ $background == 1 && $dry_run == 1 ]]; then
+	echo 'cannot combine wait/status, -b, and -n' >&2
+	exit 2
+fi
 
 file=${1:-$dir/include/defaults.conf}
 if [[ ! -e $file ]]; then
@@ -53,6 +72,48 @@ fi
 state=$(realpath -m -- "$state")
 args=(-D "MACHINE=${state##*/}" "${args[@]}" -D "THIS_DIR:=$dir" -D "TMP_DIR=$state")
 
+summary() {
+	printf 'Workspace: %s\n' "$state"
+	if [[ $1 == running ]]; then
+		echo 'status=running'
+		tail -n 1 -- "$state/ktestlog" 2>/dev/null || true
+		return 0
+	fi
+	local code log
+	read -r code 2>/dev/null <"$state/status" || {
+		echo 'status=unknown (no saved exit status)'
+		return 1
+	}
+	printf '%s\nKtest log: %s/ktestlog\n' "$code" "$state"
+	[[ ! -f $state/ktlog ]] || printf 'Runner log: %s/ktlog\n' "$state"
+	for log in "$state"/testlog-*; do
+		[[ -f $log ]] || continue
+		printf 'Test log: %s (last 40 lines)\n' "$log"
+		tail -n 40 -- "$log"
+	done
+	[[ $code == exit=* ]] || return 1
+	return "${code#exit=}"
+}
+
+if [[ $action != run ]]; then
+	[[ -f $state/lock ]] || {
+		echo "no run in workspace: $state" >&2
+		exit 1
+	}
+	exec 9<"$state/lock"
+	if [[ $action == wait ]]; then
+		if ! flock -w "$timeout" 9; then
+			summary running
+			exit 124
+		fi
+	elif ! flock -n 9; then
+		summary running
+		exit 0
+	fi
+	summary finished
+	exit $?
+fi
+
 if ((dry_run)); then
 	exec "$dir/tools/ktest/ktest.pl" "${args[@]}" --dry-run "$file"
 fi
@@ -62,35 +123,51 @@ flock -n 9 || {
 	echo "workspace in use: $state" >&2
 	exit 1
 }
-link=$PWD/ssh-${state##*/}
-cleanup() {
-	kill -TERM -- "-$pid" 2>/dev/null || true
-	wait "$pid" 2>/dev/null || true
-	TMP_DIR="$state" "$dir/bin/vm" stop
-	if [[ -L $link && $(readlink -- "$link") == "$state/ssh" ]]; then
-		rm -- "$link"
+printf 'status=running\n' >"$state/status"
+run() {
+	link=$PWD/ssh-${state##*/}
+	cleanup() {
+		local code=$?
+		trap - EXIT
+		set +e
+		[[ -z ${pid-} ]] || kill -TERM -- "-$pid" 2>/dev/null
+		[[ -z ${pid-} ]] || wait "$pid" 2>/dev/null
+		TMP_DIR="$state" "$dir/bin/vm" stop
+		if [[ -L $link && $(readlink -- "$link") == "$state/ssh" ]]; then
+			rm -- "$link"
+		fi
+		rm -f -- "$state/pid"
+		printf 'exit=%s\n' "$code" >"$state/status.new"
+		mv -- "$state/status.new" "$state/status"
+	}
+	cancel() {
+		kill -"$2" -- "-$pid" 2>/dev/null || true
+		wait "$pid" 2>/dev/null || true
+		exit "$1"
+	}
+	trap cleanup EXIT
+	trap 'cancel 130 INT' INT
+	trap 'cancel 143 TERM' TERM
+	printf '%s\n' "$BASHPID" >"$state/pid"
+	if [[ ! -L $link || $(readlink -- "$link") != "$state/ssh" ]]; then
+		ln -sT -- "$state/ssh" "$link"
 	fi
-	rm -f -- "$state/pid"
+	printf 'SSH helper: %s\n' "$link"
+	if ((noninteractive)); then
+		[[ -p $state/stdin ]] || mkfifo "$state/stdin"
+		exec 0<>"$state/stdin"
+	fi
+	# ktest must not be a session leader when it opens its console PTY.
+	setsid bash -c '"$@" <&0 & wait "$!"' kt \
+		"$dir/tools/ktest/ktest.pl" "${args[@]}" "$file" <&0 &
+	pid=$!
+	wait "$pid"
 }
-cancel() {
-	kill -INT -- "-$pid" 2>/dev/null || true
-	wait "$pid" 2>/dev/null || true
-	exit "$1"
-}
-trap cleanup EXIT
-trap 'cancel 130' INT
-trap 'cancel 143' TERM
-printf '%s\n' "$$" >"$state/pid"
-if [[ ! -L $link || $(readlink -- "$link") != "$state/ssh" ]]; then
-	ln -sT -- "$state/ssh" "$link"
+
+if ((background)); then
+	# Ignore terminal hangups; the child inherits the workspace lock.
+	(trap '' HUP; run) </dev/null >"$state/ktlog" 2>&1 &
+	printf 'PID: %s\nWorkspace: %s\nRunner log: %s/ktlog\n' "$!" "$state" "$state"
+else
+	run
 fi
-printf 'SSH helper: %s\n' "$link"
-if ((noninteractive)); then
-	[[ -p $state/stdin ]] || mkfifo "$state/stdin"
-	exec 0<>"$state/stdin"
-fi
-# ktest must not be a session leader when it opens its console PTY.
-setsid bash -c '"$@" <&0 & wait "$!"' kt \
-	"$dir/tools/ktest/ktest.pl" "${args[@]}" "$file" <&0 &
-pid=$!
-wait "$pid"

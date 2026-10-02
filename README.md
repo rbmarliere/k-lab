@@ -87,6 +87,29 @@ may be names under `tests/`, paths to configs, or directories containing a
 - `ARCH` uses `:=`; set it before including defaults in a config.
 - `-C` sets `BUILD_NOCLEAN=1`; `-n` prints resolved options; `-y` disconnects
   stdin.
+- `-b` runs in the background, implies `-y`, and captures stdout/stderr in
+  `TMP_DIR/ktlog`.
+
+Background runs support immediate status checks and bounded waits:
+
+```bash
+kt -b my-test
+kt status my-test
+kt wait my-test
+```
+
+`status` reports immediately; `wait` waits up to 300 seconds by default (`-t`
+overrides this). Both resolve `[test]` exactly like a run. With a custom
+`TMP_DIR`, repeat `-D TMP_DIR=/absolute/path`. Run these commands from the
+same kernel worktree as the launch.
+
+Completed runs save `exit=<code>` in `TMP_DIR/status`. Both commands return
+that exit code and print log paths and the last 40 lines of any
+`testlog-*` files. These are runner exit codes, not independent kernel
+verdicts. Logs are ktest-managed and may remain from an earlier run if the
+current run never reached that phase. While running, `status` returns 0; `wait`
+returns 124 on timeout, without stopping the run. Runs interrupted before
+cleanup (for example, SIGKILL) have no completed exit status.
 
 `ARCH` defaults to the host. Supported kernel architecture names are `x86_64`,
 `arm64`, `arm`, `powerpc`, `s390`, and `riscv`. Disk names and chroot contents
