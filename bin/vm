@@ -32,6 +32,7 @@ start)
 	echo $! >"$state/vm.pid"
 	;;
 run)
+	mkdir -p "$HOME"
 	exec "$bin/vng" "$OUTPUT_DIR" "${ROOT_DISK:?ROOT_DISK is required for VM boots}" \
 		--rodir "/mnt/src=$BUILD_DIR" --rwdir "/mnt/build=$OUTPUT_DIR" \
 		--ssh-tcp --ssh "${VNG_PORT:-22000}" --memory "${VNG_MEM:-1G}" \

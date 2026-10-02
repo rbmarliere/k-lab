@@ -7,11 +7,33 @@ disk=${2:?usage: vng <kernel> <root-disk> [vng-args...]}
 shift 2
 arch=${ARCH:-$(uname -m)}
 
-exec "${VNG:-$bin/../tools/virtme-ng/vng}" --run "$kernel" \
+args=("${VNG:-$bin/../tools/virtme-ng/vng}" --run "$kernel" \
 	--root-disk "$disk" \
 	--root-dev "${VNG_ROOT_DEV:-/dev/vda}" \
 	--root-fstype "${VNG_ROOT_FSTYPE:-ext4}" \
 	--arch "$("$bin/cross" vng-arch "$arch")" \
 	--busybox "${BUSYBOX:-$("$bin/cross" busybox-path "$arch")}" \
 	--user root --verbose --network user \
-	--rw --qemu-opts="${VNG_QEMU_OPTS--snapshot}" "$@"
+	--rw --qemu-opts="${VNG_QEMU_OPTS--snapshot}" "$@")
+if [[ -n ${TMP_DIR-} ]]; then
+	mkdir -p -- "$TMP_DIR"
+	printf '%q ' "${args[@]}" >"$TMP_DIR/cmdline-vng"
+	printf '\n' >>"$TMP_DIR/cmdline-vng"
+	dry_run=0
+	for arg in "$@"; do
+		[[ $arg != -- ]] || break
+		if [[ $arg == --dry-run ]]; then
+			dry_run=1
+		fi
+	done
+	if ((dry_run)); then
+		printf 'Vng command:\n'
+		cat -- "$TMP_DIR/cmdline-vng"
+		"${args[@]}" >"$TMP_DIR/cmdline-qemu"
+		printf '\nQEMU command preview:\n'
+		cat -- "$TMP_DIR/cmdline-qemu"
+		exit 0
+	fi
+	"${args[0]}" --dry-run "${args[@]:1}" >"$TMP_DIR/cmdline-qemu"
+fi
+exec "${args[@]}"

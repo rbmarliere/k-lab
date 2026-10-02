@@ -153,6 +153,15 @@ TMP_DIR=/path/to/tmp-dir VNG_PORT=22000 /path/to/k-lab/bin/vm exec
 TMP_DIR=/path/to/tmp-dir /path/to/k-lab/bin/vm stop
 ```
 
+Each VM launch records the shell-quoted vng invocation in `TMP_DIR/cmdline-vng`
+and a QEMU command preview in `TMP_DIR/cmdline-qemu`. Both include the
+wrapper's defaults and the run's options. A failed preview prevents launch.
+Temporary socket and file-descriptor paths in the preview differ from the
+actual launch.
+
+`kt -n <test>` prints configured RAM, CPUs (`VNG_ARGS`), disk, architecture,
+and snapshot settings without launching a VM.
+
 `bin/kt-kill <TMP_DIR>` requests graceful cancellation of the whole run.
 
 ## Chroot builds
