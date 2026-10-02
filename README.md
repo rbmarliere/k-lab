@@ -122,6 +122,25 @@ Use separate `TMP_DIR` directories, output directories, and `VNG_PORT` values
 for concurrent runs. The default SSH port is 22000; there is no automatic
 port allocation.
 
+## Logs and artifacts
+
+`TMP_DIR` contains the following logs:
+
+- `buildlog-*`: compiler and build output.
+- `dmesg-*`: captured guest console/kernel output.
+- `ktestlog`: ktest's phase decisions and combined output.
+- `ktlog`: background runner stdout/stderr, including launch errors.
+- `testlog-*`: test command output and assertions.
+- `vnglog`: VM launch and boot output.
+
+With the default storage settings, ktest saves available logs and the kernel
+config under `failures/<run>/` or `successes/<run>/`. These copies are named
+`testlog`, `buildlog`, `dmesg`, `logfile`, and `config`. Ktest reports the
+archive path with `Saved info to`. Logs may be absent or retained from an
+earlier run if the current run never reached their phase.
+
+VM launches also record `cmdline-vng` and `cmdline-qemu`, described below.
+
 ## VM policy
 
 Boots require `ROOT_DISK`, a raw or qcow2 image. vng handles the boot
