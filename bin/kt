@@ -123,6 +123,9 @@ flock -n 9 || {
 	echo "workspace in use: $state" >&2
 	exit 1
 }
+if (($#)); then
+	ln -sfnT -- "$(dirname -- "$file")" "$state/test"
+fi
 printf 'status=running\n' >"$state/status"
 run() {
 	link=$PWD/ssh-${state##*/}
