@@ -3,6 +3,9 @@ INCLUDE ../../include/defaults.conf
 DEFAULTS IF NOT DEFINED TEST
 TEST := build
 
+DEFAULTS IF ${TEST} == bpf
+INCLUDE ../../include/selftests.conf
+
 DEFAULTS OVERRIDE
 ROOT_DISK = /roots/suse/Tumbleweed/x86_64.img
 CHROOT = /roots/suse/Tumbleweed/x86_64
@@ -33,5 +36,6 @@ TEST_TYPE = test
 TEST_DIR = /mnt/build/kselftest/kselftest_install/bpf
 TEST_BIN = ./test_progs -vv -t btf
 TEST = ${SSH} sh -c 'mount bpffs /sys/fs/bpf -t bpf && cd ${TEST_DIR} && ${TEST_BIN}'
-POST_BUILD_APPEND = ${MAKE_CMD} headers && ${MAKE_CMD} -j$(nproc) -C tools/testing/selftests SKIP_TARGETS= TARGETS=bpf FORCE_TARGETS=1 install
+SELFTEST_TARGETS = bpf
+POST_BUILD_APPEND = ${BUILD_SELFTESTS}
 ADD_CONFIG = ${BUILD_DIR}/tools/testing/selftests/bpf/config ${BUILD_DIR}/tools/testing/selftests/bpf/config.${KLAB_ARCH}
