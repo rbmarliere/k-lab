@@ -120,6 +120,22 @@ by default; override `CROSS_COMPILE` as needed.
 leave the makefile defaults in effect; nonempty values are passed as make
 arguments. Chroot builds ignore the configured `CROSS_COMPILE` prefix.
 
+Use ktest's `MAKE_CMD` for other persistent make settings:
+
+```conf
+DEFAULTS OVERRIDE
+MAKE_CMD = ${RUN} ${THIS_DIR}/bin/make LLVM=1 LD=ld.lld KCFLAGS="-O1 -g"
+```
+
+Make-based hooks should also invoke `${MAKE_CMD}` to use the same settings and
+architecture/chroot handling. The shell parses the command once; `bin/make`
+forwards its arguments unchanged. Compiler selections must resolve inside the
+chroot when using chroot builds.
+
+`BUILD_OPTIONS` supplies extra arguments only for the kernel build, such as
+parallelism or additional targets. It does not apply to configuration or other
+make invocations and is not exported to hooks.
+
 `TMP_DIR` defaults to `tmp/<worktree>-<config>` and is protected by `flock`.
 Override with `-D TMP_DIR=/absolute/path`; `kt -n` shows the resolved path.
 Use separate `TMP_DIR` directories, output directories, and `VNG_PORT` values

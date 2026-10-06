@@ -33,5 +33,5 @@ TEST_TYPE = test
 TEST_DIR = /mnt/build/kselftest/kselftest_install/bpf
 TEST_BIN = ./test_progs -vv -t btf
 TEST = ${SSH} sh -c 'mount bpffs /sys/fs/bpf -t bpf && cd ${TEST_DIR} && ${TEST_BIN}'
-POST_BUILD_APPEND = ${RUN} ${THIS_DIR}/hooks/selftests/post-build bpf
+POST_BUILD_APPEND = ${MAKE_CMD} headers && ${MAKE_CMD} -j$(nproc) -C tools/testing/selftests SKIP_TARGETS= TARGETS=bpf FORCE_TARGETS=1 install
 ADD_CONFIG = ${BUILD_DIR}/tools/testing/selftests/bpf/config ${BUILD_DIR}/tools/testing/selftests/bpf/config.${KLAB_ARCH}

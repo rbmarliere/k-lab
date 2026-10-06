@@ -1,8 +1,0 @@
-#!/usr/bin/env bash
-set -e
-
-targets=${1:?usage: post-build <selftest collections>}
-read -r -a options <<<"${BUILD_OPTIONS-}"
-"$BIN/make" headers
-"$BIN/make" "${options[@]}" -C tools/testing/selftests \
-	SKIP_TARGETS= TARGETS="$targets" FORCE_TARGETS=1 install
