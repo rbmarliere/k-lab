@@ -18,6 +18,10 @@ if [[ -n ${HOSTCFLAGS-} ]]; then
 	make_cmd+=("HOSTCFLAGS=$HOSTCFLAGS")
 fi
 
+# Empty environment overrides suppress makefile defaults. Nonempty settings
+# are already in make_cmd; CROSS_COMPILE is deliberately omitted in chroots.
+unset CC HOSTCC HOSTCFLAGS CROSS_COMPILE
+
 if [[ ${CHROOT_BUILD:-0} == 1 ]]; then
 	exec "$BIN"/chroot "${make_cmd[@]}" "$@"
 fi

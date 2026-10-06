@@ -116,6 +116,10 @@ cleanup (for example, SIGKILL) have no completed exit status.
 do not select the architecture. Foreign host builds use SUSE compiler prefixes
 by default; override `CROSS_COMPILE` as needed.
 
+`CC`, `HOSTCC`, and `HOSTCFLAGS` apply to every make invocation. Empty values
+leave the makefile defaults in effect; nonempty values are passed as make
+arguments. Chroot builds ignore the configured `CROSS_COMPILE` prefix.
+
 `TMP_DIR` defaults to `tmp/<worktree>-<config>` and is protected by `flock`.
 Override with `-D TMP_DIR=/absolute/path`; `kt -n` shows the resolved path.
 Use separate `TMP_DIR` directories, output directories, and `VNG_PORT` values
