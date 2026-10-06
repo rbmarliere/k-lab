@@ -19,7 +19,7 @@ mount -t proc proc "$root/proc"
 mount --rbind /dev "$root/dev"
 mount --rbind /sys "$root/sys"
 for dir in "$BUILD_DIR" "$OUTPUT_DIR"; do
-	mount --mkdir --bind "$dir" "$root$dir"
+	mount --mkdir --rbind "$dir" "$root$dir"
 done
 
 trap 'exit 130' INT
