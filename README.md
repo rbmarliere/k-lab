@@ -205,7 +205,8 @@ and snapshot settings without launching a VM.
 
 ## Chroot builds
 
-Set `CHROOT_BUILD = 1` and `CHROOT = /path/to/rootfs`. Each make command runs
+Set `CHROOT = /path/to/rootfs` globally or within a `TEST_START` block. Leave
+it empty to build on the host. Each make command with a nonempty `CHROOT` runs
 in an unprivileged user/mount/PID namespace with a writable overlay over that
 rootfs. `TMP_DIR` retains overlay changes; mounts vanish when the command
 exits. The rootfs is not modified. Source and output are bound in at their host

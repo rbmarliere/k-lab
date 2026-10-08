@@ -5,7 +5,7 @@ make_cmd+=(-C "$BUILD_DIR" O="$OUTPUT_DIR")
 if [[ -n ${ARCH-} ]]; then
 	make_cmd+=("ARCH=$ARCH")
 fi
-if [[ ${CHROOT_BUILD:-0} != 1 && -n ${CROSS_COMPILE-} ]]; then
+if [[ -z ${CHROOT-} && -n ${CROSS_COMPILE-} ]]; then
 	make_cmd+=("CROSS_COMPILE=$CROSS_COMPILE")
 fi
 if [[ -n ${CC-} ]]; then
@@ -22,7 +22,7 @@ fi
 # are already in make_cmd; CROSS_COMPILE is deliberately omitted in chroots.
 unset CC HOSTCC HOSTCFLAGS CROSS_COMPILE
 
-if [[ ${CHROOT_BUILD:-0} == 1 ]]; then
+if [[ -n ${CHROOT-} ]]; then
 	exec "$BIN"/chroot "${make_cmd[@]}" "$@"
 fi
 exec "${make_cmd[@]}" "$@"

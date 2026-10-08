@@ -8,7 +8,6 @@ INCLUDE ../../include/selftests.conf
 
 DEFAULTS OVERRIDE
 ROOT_DISK = /roots/suse/Tumbleweed/x86_64.img
-CHROOT = /roots/suse/Tumbleweed/x86_64
 
 TEST_START IF ${TEST} == build
 TEST_TYPE = build
@@ -24,11 +23,11 @@ TEST = ${SSH} sleep infinity
 
 TEST_START IF ${TEST} == chroot
 TEST_TYPE = build
-CHROOT_BUILD = 1
+CHROOT = /roots/suse/Tumbleweed/x86_64
 
 TEST_START IF ${TEST} == chroot-boot
 TEST_TYPE = test
-CHROOT_BUILD = 1
+CHROOT = /roots/suse/Tumbleweed/x86_64
 TEST = ${SSH} sh -c 'uname -m | grep -qx ${KLAB_UNAME_ARCH} && test -b /dev/vda'
 
 TEST_START IF ${TEST} == bpf
