@@ -53,8 +53,23 @@ build-only check, use `TEST_TYPE = build`; no image or guest script is needed.
 Extend phase hooks with their corresponding `*_APPEND` options.
 
 Include `include/suse.conf` after defaults for SUSE product configuration. Set
-`BRANCH = stable` or the relevant config-tree directory. Leave `VERSION` and
-`PATCHLEVEL` unset for Tumbleweed, or set both for SLE.
+`BRANCH = stable` or the relevant config-tree directory. `FLAVOR` selects the
+config filename and defaults to `default`. Leave `VERSION` and `PATCHLEVEL`
+unset for Tumbleweed, or set both for SLE.
+
+The SUSE include supplies the flavor through `ADD_CONFIG`. To add test-specific
+fragments without replacing it, retain the inherited list after `TEST_START`:
+
+```conf
+TEST_START
+TEST_TYPE = build
+ADD_CONFIG = ${ADD_CONFIG} ${THIS_DIR}/tests/my-test/extra.config
+```
+
+A plain per-test `ADD_CONFIG = ...` replaces the flavor fragment. This
+self-reference retains it only in a test section; do not use it to redefine
+`ADD_CONFIG` in `DEFAULTS OVERRIDE`. Later fragments override earlier ones;
+`MIN_CONFIG` takes precedence over all `ADD_CONFIG` fragments.
 
 For full syntax, see ktest's [sample.conf](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/tools/testing/ktest/sample.conf) and
 [examples](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/tools/testing/ktest/examples/README).
