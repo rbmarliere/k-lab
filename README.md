@@ -231,3 +231,9 @@ kt -D TEST:=manual tumbleweed
 `manual` keeps the VM running for interactive SSH access; Ctrl-C ends the run.
 The sample's `TEST` selector uses `:=`. Override `ROOT_DISK` and `CHROOT` for
 your machine.
+
+## Agent skill
+
+[SKILL.md](SKILL.md) provides a kernel-testing and defect-reproduction workflow
+for agents supporting Agent Skills. Load it with your agent and provide a
+test goal or report while working in the kernel worktree.
