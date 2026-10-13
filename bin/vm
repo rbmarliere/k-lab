@@ -10,6 +10,10 @@ stop() {
 	[[ -f $state/vm.pid ]] || return 0
 	local pid
 	pid=$(<"$state/vm.pid")
+	[[ $pid =~ ^[1-9][0-9]*$ && $pid -gt 1 && /proc/$pid/fd/9 -ef $state/lock ]] || {
+		rm -f -- "$state/vm.pid"
+		return 0
+	}
 	kill -TERM -- "-$pid" 2>/dev/null || true
 	for ((i = 0; i < 20; i++)); do
 		kill -0 -- "-$pid" 2>/dev/null || break
