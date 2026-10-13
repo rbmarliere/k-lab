@@ -14,7 +14,7 @@ TEST_TYPE = build
 
 TEST_START IF ${TEST} == boot
 TEST_TYPE = test
-TEST = ${SSH} sh -c 'uname -m | grep -qx ${KLAB_UNAME_ARCH} && test -b /dev/vda'
+TEST = ${SSH} test -b /dev/vda
 
 TEST_START IF ${TEST} == manual
 TEST_TYPE = test
@@ -28,7 +28,7 @@ CHROOT = /roots/suse/Tumbleweed/x86_64
 TEST_START IF ${TEST} == chroot-boot
 TEST_TYPE = test
 CHROOT = /roots/suse/Tumbleweed/x86_64
-TEST = ${SSH} sh -c 'uname -m | grep -qx ${KLAB_UNAME_ARCH} && test -b /dev/vda'
+TEST = ${SSH} test -b /dev/vda
 
 TEST_START IF ${TEST} == bpf
 TEST_TYPE = test

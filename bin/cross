@@ -19,7 +19,6 @@ read -r arch vng uname image compiler suse <<<"$row"
 case $command in
 normalize-arch) echo "$arch" ;;
 vng-arch) echo "$vng" ;;
-uname-arch) echo "$uname" ;;
 build-target) echo "$image" ;;
 suse-arch) echo "$suse" ;;
 cross-compile)
