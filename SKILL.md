@@ -80,6 +80,11 @@ userspace.
   There is no automatic port allocation.
 - Keep default disk snapshots. Save results under `/mnt/build`; other guest
   filesystem changes disappear when the VM stops.
+- `RUN_TIMEOUT` (ktest.pl) bounds every command ktest runs via `run_command`,
+  including `make mrproper`/the build itself, not just the final SSH test
+  command. A value sized for the test step alone can abort mid-build. Leave
+  it unset unless it is also sized for a from-scratch build, and prefer `-C`
+  (reuse build objects) over tightening `RUN_TIMEOUT` to avoid rebuild stalls.
 
 ## Run and iterate
 
