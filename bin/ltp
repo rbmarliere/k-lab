@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Build LTP out of tree in LTP_BUILD_DIR through CHROOT_USER and install it into OUTPUT_DIR/ltp.
+set -e
+
+src=$(realpath -e -- "${LTP_DIR:?LTP_DIR is required}")
+out=$(realpath -m -- "${LTP_BUILD_DIR:?LTP_BUILD_DIR is required}")
+if [[ -e $src/include/mk/config.mk ]]; then
+	echo "ltp: $src is configured in-tree; run 'make distclean' there" >&2
+	exit 1
+fi
+
+# Kernel compiler settings do not apply to LTP; use LTP_CONFIGURE_OPTIONS.
+unset ARCH CC HOSTCC HOSTCFLAGS CROSS_COMPILE
+
+run() {
+	CHROOT=$CHROOT_USER CHROOT_BINDS="$src $out" "$BIN"/chroot "$@"
+}
+
+# Refresh autotools on the host and configure in the selected build root.
+make -C "$src" autotools
+mkdir -p "$out"
+# shellcheck disable=SC2086 # option lists are space-separated
+run env -C "$out" "$src/configure" --prefix=/ltp $LTP_CONFIGURE_OPTIONS
+mk=(make -C "$out" -f "$src/Makefile" top_srcdir="$src" top_builddir="$out")
+# shellcheck disable=SC2086
+run "${mk[@]}" $LTP_BUILD_OPTIONS all
+run "${mk[@]}" DESTDIR="$OUTPUT_DIR" install

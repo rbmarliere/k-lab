@@ -250,20 +250,53 @@ host support for unprivileged user namespaces and OverlayFS mounts, and a
 recent util-linux with `--forward-signals`. Foreign chroots also need host
 qemu-user/binfmt registration.
 
+## LTP
+
+Set `LTP_GIT` in `setup.conf` to an LTP worktree, or set `LTP_DIR` per test.
+Include `include/ltp.conf` and add `${BUILD_LTP}` to `POST_BUILD_APPEND`:
+
+```conf
+INCLUDE ../../include/defaults.conf
+INCLUDE ../../include/ltp.conf
+
+DEFAULTS OVERRIDE
+ROOT_DISK = /path/to/image.img
+CHROOT_USER = /path/to/matching/rootfs
+POST_BUILD_APPEND = ${BUILD_LTP}
+
+TEST_START
+TEST_TYPE = test
+TEST = ${SSH} env LTPROOT=/mnt/build/ltp /mnt/build/ltp/testcases/bin/getpid01
+```
+
+LTP builds out of tree in `LTP_BUILD_DIR` (default `TMP_DIR/ltp`), outside the
+kernel output. It installs into `OUTPUT_DIR/ltp`, seen by the guest as
+`/mnt/build/ltp`. The worktree must not be configured in-tree. Each run
+refreshes autotools on the host and reruns configure, then builds incrementally.
+
+Set `CHROOT_USER` to a rootfs matching the guest; an empty value builds on
+the host. Kernel compiler settings do not apply. `LTP_CONFIGURE_OPTIONS`
+passes configure arguments, including explicit `--host` and `CC=...` for
+cross-builds. `LTP_BUILD_OPTIONS` passes make arguments.
+
+Use a fresh `TMP_DIR` after changing architecture, rootfs or compiler flags.
+
 ## Sample
 
-`tests/tumbleweed` demonstrates build, boot, chroot, and BPF modes with Tumbleweed
-x86_64 image/rootfs paths. It is a sample, not the entrypoint for unrelated
-work; create task-specific tests instead. For example:
+`tests/tumbleweed` demonstrates build, boot, chroot, BPF and LTP modes with
+Tumbleweed x86_64 image/rootfs paths. It is a sample, not the entrypoint for
+unrelated work; create task-specific tests instead. For example:
 
 ```bash
 kt -D TEST:=boot tumbleweed
 kt -D TEST:=manual tumbleweed
+kt -D TEST:=ltp tumbleweed
 ```
 
 `manual` keeps the VM running for interactive SSH access; Ctrl-C ends the run.
-The sample's `TEST` selector uses `:=`. Override `ROOT_DISK` and
-`CHROOT_KERNEL` for your machine.
+The sample's `TEST` selector uses `:=`. Override `ROOT_DISK` for your image.
+Per-test rootfs overrides need an index, for example
+`-D 'CHROOT_USER[1]=/path/to/rootfs'` for LTP.
 
 ## Agent skill
 
