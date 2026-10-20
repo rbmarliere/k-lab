@@ -245,10 +245,12 @@ POST_BUILD_APPEND = cp ${THIS_DIR}/tests/my-test/repro.c ${OUTPUT_DIR}/ && ${RUN
 `MAKE_CMD`, including selftests, still uses `CHROOT_KERNEL`. Do not reuse
 kernel build tools in a different root.
 
-The rootfs must be user-owned and contain the build dependencies. This needs
-host support for unprivileged user namespaces and OverlayFS mounts, and a
-recent util-linux with `--forward-signals`. Foreign chroots also need host
-qemu-user/binfmt registration.
+The whole rootfs must be owned by the invoking user and contain the build
+dependencies. Fix ownership with `sudo chown -R "$USER": /path/to/rootfs`.
+
+Chroot builds need unprivileged user namespaces, OverlayFS, and util-linux
+with `--forward-signals`. Foreign roots also need host qemu-user/binfmt
+registration.
 
 ## LTP
 
