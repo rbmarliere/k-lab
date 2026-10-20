@@ -72,7 +72,10 @@ userspace.
   everything run through MAKE_CMD; an empty CHROOT_KERNEL selects host
   builds. Choose the rootfs explicitly; do not derive it from the disk
   filename or assume its packages match the guest. Chroot builds use the
-  rootfs's native toolchain and ignore CROSS_COMPILE.
+  rootfs's native toolchain and ignore CROSS_COMPILE. Build guest programs
+  with `${RUN_USER}`; `CHROOT_USER` (default CHROOT_KERNEL) selects their
+  root, so the kernel can build on the host while they build against the
+  guest's libraries.
 - Guest paths are `/mnt/src` (read-only source) and `/mnt/build` (writable
   output, also the SSH working directory). Stage task files into OUTPUT_DIR on
   the host.

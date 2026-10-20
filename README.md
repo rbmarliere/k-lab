@@ -131,8 +131,8 @@ cleanup (for example, SIGKILL) have no completed exit status.
 do not select the architecture. Foreign host builds use SUSE compiler prefixes
 by default; override `CROSS_COMPILE` as needed.
 
-`CC`, `HOSTCC`, and `HOSTCFLAGS` apply to every make invocation. Empty values
-leave the makefile defaults in effect; nonempty values are passed as make
+`CC`, `HOSTCC`, and `HOSTCFLAGS` apply to every `MAKE_CMD` invocation. Empty
+values leave the makefile defaults in effect; nonempty values are passed as make
 arguments. Chroot builds ignore the configured `CROSS_COMPILE` prefix.
 
 Use ktest's `MAKE_CMD` for other persistent make settings:
@@ -230,6 +230,20 @@ mounts vanish when the command exits. The rootfs is not modified. Source and
 output are bound in at their host paths, and builds use the chroot's native
 toolchain, not `CROSS_COMPILE`. `bin/chroot` also binds the space-separated
 paths in its `CHROOT_BINDS` environment variable.
+
+`CHROOT_USER` selects a rootfs for standalone guest programs and defaults to
+`CHROOT_KERNEL`. Build them with `${RUN_USER}`; kernel compiler settings do
+not apply. Use a rootfs matching the guest's libraries, or leave it empty to
+build on the host:
+
+```conf
+DEFAULTS OVERRIDE
+CHROOT_USER = /path/to/guest/rootfs
+POST_BUILD_APPEND = cp ${THIS_DIR}/tests/my-test/repro.c ${OUTPUT_DIR}/ && ${RUN_USER} gcc -o ${OUTPUT_DIR}/repro ${OUTPUT_DIR}/repro.c
+```
+
+`MAKE_CMD`, including selftests, still uses `CHROOT_KERNEL`. Do not reuse
+kernel build tools in a different root.
 
 The rootfs must be user-owned and contain the build dependencies. This needs
 host support for unprivileged user namespaces and OverlayFS mounts, and a
