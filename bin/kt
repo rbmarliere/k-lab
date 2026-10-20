@@ -157,8 +157,7 @@ run() {
 	fi
 	printf 'SSH helper: %s\n' "$link"
 	if ((noninteractive)); then
-		[[ -p $state/stdin ]] || mkfifo "$state/stdin"
-		exec 0<>"$state/stdin"
+		exec 0</dev/null
 	fi
 	# ktest must not be a session leader when it opens its console PTY.
 	setsid bash -c '"$@" <&0 & wait "$!"' kt \
