@@ -142,7 +142,7 @@ DEFAULTS OVERRIDE
 MAKE_CMD = ${RUN} ${THIS_DIR}/bin/make LLVM=1 LD=ld.lld KCFLAGS="-O1 -g"
 ```
 
-Make-based hooks should also invoke `${MAKE_CMD}` to use the same settings and
+Kernel make hooks should also invoke `${MAKE_CMD}` to use the same settings and
 architecture/chroot handling. The shell parses the command once; `bin/make`
 forwards its arguments unchanged. Compiler selections must resolve inside the
 chroot when using chroot builds.
@@ -221,7 +221,7 @@ and snapshot settings without launching a VM.
 ## Chroot builds
 
 Set `CHROOT_KERNEL = /path/to/rootfs` to run `MAKE_CMD` commands in that
-rootfs, including configuration, kernel builds, headers and selftests. Leave
+rootfs, including configuration, kernel builds and headers. Leave
 it empty to build on the host.
 
 Commands run in unprivileged user/mount/PID namespaces with a writable
@@ -242,8 +242,8 @@ CHROOT_USER = /path/to/guest/rootfs
 POST_BUILD_APPEND = cp ${THIS_DIR}/tests/my-test/repro.c ${OUTPUT_DIR}/ && ${RUN_USER} gcc -o ${OUTPUT_DIR}/repro ${OUTPUT_DIR}/repro.c
 ```
 
-`MAKE_CMD`, including selftests, still uses `CHROOT_KERNEL`. Do not reuse
-kernel build tools in a different root.
+Kernel builds use `CHROOT_KERNEL`. Complete selftest collections, including
+their test modules, build in `CHROOT_USER`.
 
 The whole rootfs must be owned by the invoking user and contain the build
 dependencies. Fix ownership with `sudo chown -R "$USER": /path/to/rootfs`.
@@ -251,6 +251,36 @@ dependencies. Fix ownership with `sudo chown -R "$USER": /path/to/rootfs`.
 Chroot builds need unprivileged user namespaces, OverlayFS, and util-linux
 with `--forward-signals`. Foreign roots also need host qemu-user/binfmt
 registration.
+
+## Selftests
+
+Include `include/selftests.conf`, set `SELFTEST_TARGETS`, and add
+`${BUILD_SELFTESTS}` to `POST_BUILD_APPEND`:
+
+```conf
+DEFAULTS OVERRIDE
+CHROOT_KERNEL =
+CHROOT_USER = /path/to/guest/rootfs
+SELFTEST_TARGETS = fchmodat2
+POST_BUILD_APPEND = ${BUILD_SELFTESTS}
+```
+
+Headers are generated through `MAKE_CMD`; the selected collections build
+in `CHROOT_USER`, including their test modules. `O` and `KDIR` point at the
+prepared kernel output. Build output uses kselftest's default,
+`OUTPUT_DIR/kselftest`; module output follows each collection's rules.
+Installed tests remain at `/mnt/build/kselftest/kselftest_install`. The
+build root needs the collection's dependencies, including `make`, a compiler
+and `rsync`.
+
+`SELFTEST_BUILD_OPTIONS` passes make arguments, including userspace compiler
+settings. Kernel `CC`, `HOSTCC` and `HOSTCFLAGS` do not apply. Host builds use
+`CROSS_COMPILE`; chroot builds use the rootfs's native toolchain. Kernel
+cleaning may also remove selftest intermediates.
+
+Module builds need a toolchain that supports the selected kernel and must
+be able to run its build helpers. Build errors are reported normally; there
+is no automatic fallback to another root.
 
 ## LTP
 

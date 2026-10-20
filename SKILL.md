@@ -75,8 +75,11 @@ userspace.
   rootfs's native toolchain and ignore CROSS_COMPILE. Build guest programs
   with `${RUN_USER}`; `CHROOT_USER` (default CHROOT_KERNEL) selects their
   root, so the kernel can build on the host while they build against the
-  guest's libraries. A rootfs not owned entirely by the invoking user fails
-  with mount or permission errors; report it as a setup blocker.
+  guest's libraries. `${BUILD_SELFTESTS}` builds complete collections,
+  including test modules, in `CHROOT_USER`. Headers come from `MAKE_CMD`;
+  module builds use the prepared kernel output through `O` and `KDIR`.
+  A rootfs not owned entirely by the invoking user fails with mount or
+  permission errors; report it as a setup blocker.
 - Guest paths are `/mnt/src` (read-only source) and `/mnt/build` (writable
   output, also the SSH working directory). Stage task files into OUTPUT_DIR on
   the host.
