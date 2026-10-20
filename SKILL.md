@@ -45,6 +45,13 @@ Read `setup.conf` for the configured `LINUX_GIT`; consult
 that kernel tree only for deeper ktest syntax. Do not inspect or modify harness
 source unless asked; searching the kernel code and its history is expected.
 
+Keep all run configuration in the test file and its includes: architecture,
+disk and rootfs paths, toolchain, resources, workspace, target selection and
+iteration counts. Never use `kt -D` or shell-prefix environment assignments
+to supply test settings at launch. The command line selects the config and
+controls execution (`-n`, `-b`, `-C`, `-y`, and wait `-t`). Use separate
+config files for variants rather than command-line overrides.
+
 Throughout this skill, `kt` means the resolved absolute path to `bin/kt`.
 Run it directly from the kernel worktree root; do not source `k-lab.sh` or
 assume `kt` is on PATH. Create a task-specific `tests/<name>/` with a
@@ -59,10 +66,11 @@ depend on resources.
 Minimal boot-test config (replace `example` and the image path):
 
 ```conf
+ARCH := x86_64
 INCLUDE ${THIS_DIR}/include/defaults.conf
 
 DEFAULTS OVERRIDE
-ROOT_DISK = /path/to/image.img
+ROOT_DISK = /path/to/x86_64.img
 POST_BUILD_APPEND = cp ${THIS_DIR}/tests/example/run.sh ${OUTPUT_DIR}/run.sh
 
 TEST_START
@@ -74,7 +82,8 @@ For build-only checks, use `TEST_TYPE = build`; no disk or guest script is
 needed. The kernel comes from this worktree; ROOT_DISK supplies guest
 userspace.
 
-- Set foreign `ARCH := ...` before INCLUDE; disk names do not select it.
+- Declare `ARCH := ...` before the first INCLUDE, even for native builds;
+  disk names do not select it.
 - Use normal `=` options for ROOT_DISK, CHROOT_KERNEL, and CROSS_COMPILE.
   A nonempty `CHROOT_KERNEL = /path/to/rootfs` selects chroot builds for
   everything run through MAKE_CMD; an empty CHROOT_KERNEL selects host
@@ -117,10 +126,11 @@ userspace.
    `status=running` and returns 124. Use `kt status <name>/test` for an immediate
    check; it returns 0 even while running, so check the reported status rather
    than the return code alone. Run both commands from the same kernel worktree
-   as the launch, with the same test argument and any `-D TMP_DIR=...` override.
-   A timed-out wait leaves the run active; do not relaunch it or start a
-   conflicting run. Confirm completion (`exit=<code>`) before interpreting
-   results; a runner exit code or log pattern alone is not a kernel verdict.
+   as the launch, with the same config file. Keep that config unchanged until
+   the run finishes. A timed-out wait leaves the run active; do not relaunch
+   it or start a conflicting run. Confirm completion (`exit=<code>`) before
+   interpreting results; a runner exit code or log pattern alone is not a
+   kernel verdict.
 4. Inspect the focused log for the failed phase rather than searching combined
    output: start with the test log for assertions, build log for compiler
    errors, VM log for boot problems, or runner log for background launch

@@ -27,20 +27,29 @@ cd tools/busybox-static-builder
 ./build x86_64
 ```
 
-Override `BUSYBOX` per test or with `kt -D BUSYBOX=/path/to/static/busybox`.
-`VNG = /path/to/vng` selects a different executable. Install the build tools
-and vng dependencies yourself; see the [vng documentation](https://github.com/arighi/virtme-ng#readme).
+Set `BUSYBOX = /path/to/static/busybox` in the test config when needed.
+Set `VNG = /path/to/vng` there to select a different executable.
+Install the build tools and vng dependencies yourself; see the
+[vng documentation](https://github.com/arighi/virtme-ng#readme).
 
 ## Tests
 
 Write a separate test under `tests/` for each task. Keep its ktest config,
-fragments, and reproducer files together. For example, `tests/my-test/test`:
+fragments, and reproducer files together. Put all run configuration in that
+file and its includes: architecture, disk and rootfs paths, toolchain,
+resources, workspace, target selection and iteration counts. Do not use
+`kt -D` or shell environment assignments to configure a launch. Create a
+separate config file for each variant.
+
+Always declare `ARCH` before the first `INCLUDE`, including native builds.
+For example, `tests/my-test/test`:
 
 ```conf
+ARCH := x86_64
 INCLUDE ../../include/defaults.conf
 
 DEFAULTS OVERRIDE
-ROOT_DISK = /path/to/image.img
+ROOT_DISK = /path/to/x86_64.img
 POST_BUILD_APPEND = cp ${THIS_DIR}/tests/my-test/run.sh ${OUTPUT_DIR}/run.sh
 
 TEST_START
@@ -79,27 +88,20 @@ For full syntax, see ktest's [sample.conf](https://git.kernel.org/pub/scm/linux/
 Run from the kernel worktree, selecting your task's test:
 
 ```bash
-kt -n my-test                          # resolved options only
-kt my-test                             # build and run the configured test
-kt -C my-test                          # rebuild without cleaning
-kt -D COMPILE_COMMANDS=0 my-test       # skip compile_commands.json
-kt -D ARCH:=arm64 \
-   -D CROSS_COMPILE=/path/to/aarch64-linux-gnu- \
-   my-test
+kt -n my-test    # resolved options only
+kt my-test       # build and run the configured test
+kt -C my-test    # rebuild without cleaning
 ```
 
 `compile_commands.json` is generated in `OUTPUT_DIR` by default and linked
 from the kernel source directory (`BUILD_DIR`). The latest build selects the
-active database. Set `COMPILE_COMMANDS=0` to disable generation and leave any
-existing link unchanged.
+active database. Set `COMPILE_COMMANDS = 0` in the test config to disable
+generation and leave any existing link unchanged.
 
-Without a test argument, `kt` performs a host defconfig build. Test arguments
-may be names under `tests/`, paths to configs, or directories containing a
-`test` file.
+Select a test by its name under `tests/`, a config path, or a directory
+containing a `test` file. Command-line flags control execution, not the test
+configuration:
 
-- `-D name=value` forwards normal ktest options, including per-test `[N]`
-  overrides.
-- `ARCH` uses `:=`; set it before including defaults in a config.
 - `-C` sets `BUILD_NOCLEAN=1`; `-n` prints resolved options; `-y` disconnects
   stdin.
 - `-b` runs in the background, implies `-y`, and captures stdout/stderr in
@@ -114,9 +116,9 @@ kt wait my-test
 ```
 
 `status` reports immediately; `wait` waits up to 300 seconds by default (`-t`
-overrides this). Both resolve `[test]` exactly like a run. With a custom
-`TMP_DIR`, repeat `-D TMP_DIR=/absolute/path`. Run these commands from the
-same kernel worktree as the launch.
+changes this). Both resolve `[test]` exactly like a run. Run them from the
+same kernel worktree with the same config file used for launch. Keep that
+config unchanged until the run finishes.
 
 Completed runs save `exit=<code>` in `TMP_DIR/status`. Both commands return
 that exit code and print log paths and the last 40 lines of any
@@ -126,10 +128,11 @@ current run never reached that phase. While running, `status` returns 0; `wait`
 returns 124 on timeout, without stopping the run. Runs interrupted before
 cleanup (for example, SIGKILL) have no completed exit status.
 
-`ARCH` defaults to the host. Supported kernel architecture names are `x86_64`,
-`arm64`, `arm`, `powerpc`, `s390`, and `riscv`. Disk names and chroot contents
-do not select the architecture. Foreign host builds use SUSE compiler prefixes
-by default; override `CROSS_COMPILE` as needed.
+Set `ARCH := ...` before the first `INCLUDE` in each test config. Supported
+kernel architecture names are `x86_64`, `arm64`, `arm`, `powerpc`, `s390`, and
+`riscv`. Disk names and chroot contents do not select it. Foreign host builds
+use SUSE compiler prefixes by default; set `CROSS_COMPILE = ...` in the config
+if a different prefix is needed.
 
 `CC`, `HOSTCC`, and `HOSTCFLAGS` apply to every `MAKE_CMD` invocation. Empty
 values leave the makefile defaults in effect; nonempty values are passed as make
@@ -152,10 +155,10 @@ parallelism or additional targets. It does not apply to configuration or other
 make invocations and is not exported to hooks.
 
 `TMP_DIR` defaults to `tmp/<worktree>-<config>` and is protected by `flock`.
-Override with `-D TMP_DIR=/absolute/path`; `kt -n` shows the resolved path.
-Use separate `TMP_DIR` directories, output directories, and `VNG_PORT` values
-for concurrent runs. The default SSH port is 22000; there is no automatic
-port allocation.
+Set `TMP_DIR` in the test config if a different workspace is needed; `kt -n`
+shows the resolved path. Concurrent runs need separate config files,
+workspaces, output directories and `VNG_PORT` values. The default SSH port is
+22000; there is no automatic port allocation.
 
 ## Logs and artifacts
 
@@ -199,13 +202,9 @@ other image layouts; enable the chosen filesystem in the kernel config.
 `VNG_MEM` defaults to `1G`; `VNG_ARGS` forwards other vng flags, such as
 `--cpus 4 --systemd`.
 
-Ctrl-C stops the run and its VM. While a run is active, another TTY can open
-an SSH shell or stop the VM using the run's TMP_DIR and VNG_PORT:
-
-```bash
-TMP_DIR=/path/to/tmp-dir VNG_PORT=22000 /path/to/k-lab/bin/vm exec
-TMP_DIR=/path/to/tmp-dir /path/to/k-lab/bin/vm stop
-```
+Ctrl-C stops the run and its VM. For interactive SSH, use the run's
+`TMP_DIR/ssh` helper, which already contains the workspace and port. Do not
+assemble another command with separate configuration values.
 
 Each VM launch records the shell-quoted vng invocation in `TMP_DIR/cmdline-vng`
 and a QEMU command preview in `TMP_DIR/cmdline-qemu`. Both include the
@@ -288,12 +287,13 @@ Set `LTP_GIT` in `setup.conf` to an LTP worktree, or set `LTP_DIR` per test.
 Include `include/ltp.conf` and add `${BUILD_LTP}` to `POST_BUILD_APPEND`:
 
 ```conf
+ARCH := arm64
 INCLUDE ../../include/defaults.conf
 INCLUDE ../../include/ltp.conf
 
 DEFAULTS OVERRIDE
-ROOT_DISK = /path/to/image.img
-CHROOT_USER = /path/to/matching/rootfs
+ROOT_DISK = /path/to/aarch64.img
+CHROOT_USER = /path/to/aarch64/rootfs
 LTP_TARGETS = testcases/kernel/syscalls/getpid
 POST_BUILD_APPEND = ${BUILD_LTP}
 
@@ -338,18 +338,21 @@ next build so configure refreshes its probe results.
 
 `tests/tumbleweed` demonstrates build, boot, chroot, BPF and LTP modes with
 Tumbleweed x86_64 image/rootfs paths. It is a sample, not the entrypoint for
-unrelated work; create task-specific tests instead. For example:
+unrelated work; create task-specific tests instead. Select a sample mode by
+editing its existing `TEST := build` assignment, for example:
+
+```conf
+TEST := ltp
+```
+
+Set the disk, rootfs and other settings in the file, then run:
 
 ```bash
-kt -D TEST:=boot tumbleweed
-kt -D TEST:=manual tumbleweed
-kt -D TEST:=ltp tumbleweed
+kt -n tumbleweed
+kt tumbleweed
 ```
 
 `manual` keeps the VM running for interactive SSH access; Ctrl-C ends the run.
-The sample's `TEST` selector uses `:=`. Override `ROOT_DISK` for your image.
-Per-test overrides need an index, for example
-`-D 'CHROOT_USER[1]=/path/to/rootfs'` for LTP.
 
 ## Agent skill
 
