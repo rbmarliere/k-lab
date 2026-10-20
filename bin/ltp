@@ -34,8 +34,9 @@ run() {
 # Refresh autotools on the host and configure in the selected build root.
 make -C "$src" autotools
 mkdir -p "$out"
+# Cache configure probes in LTP_BUILD_DIR; later options can override the cache.
 # shellcheck disable=SC2086 # option lists are space-separated
-run env -C "$out" "$src/configure" --prefix=/ltp $LTP_CONFIGURE_OPTIONS
+run env -C "$out" "$src/configure" --prefix=/ltp --config-cache $LTP_CONFIGURE_OPTIONS
 
 build_install() {
 	local dir=$1

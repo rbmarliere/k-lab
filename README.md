@@ -305,12 +305,16 @@ TEST = ${SSH} env LTPROOT=/mnt/build/ltp /mnt/build/ltp/testcases/bin/getpid01
 LTP builds out of tree in `LTP_BUILD_DIR` (default `TMP_DIR/ltp`), outside the
 kernel output. It installs into `OUTPUT_DIR/ltp`, seen by the guest as
 `/mnt/build/ltp`. The worktree must not be configured in-tree. Each run
-refreshes autotools on the host and reruns configure, then builds incrementally.
+refreshes autotools on the host and reruns configure with `--config-cache`,
+then builds incrementally. Autoconf saves probe results in
+`LTP_BUILD_DIR/config.cache` for subsequent runs; the first configuration
+still runs all probes.
 
 Set `CHROOT_USER` to a rootfs matching the guest; an empty value builds on
 the host. Kernel compiler settings do not apply. `LTP_CONFIGURE_OPTIONS`
 passes configure arguments, including explicit `--host` and `CC=...` for
-cross-builds. `LTP_BUILD_OPTIONS` passes make arguments.
+cross-builds. These options follow the defaults; add `--cache-file=/dev/null`
+to disable caching. `LTP_BUILD_OPTIONS` passes make arguments.
 
 `LTP_TARGETS` selects source-relative directories to build and install. Empty
 means the full tree. Subset builds prepare the common LTP library first;
@@ -325,7 +329,10 @@ Subset mode skips the top-level installation; run selected tests directly.
 Existing installed files are not removed. Unknown directories and build
 failures stop the run; there is no full-build fallback.
 
-Use a fresh `TMP_DIR` after changing architecture, rootfs or compiler flags.
+Use a fresh `TMP_DIR` (or `LTP_BUILD_DIR` if explicitly set) after changing
+architecture, build root, toolchain or compiler flags. After installing or
+updating build dependencies, remove `LTP_BUILD_DIR/config.cache` before the
+next build so configure refreshes its probe results.
 
 ## Sample
 
