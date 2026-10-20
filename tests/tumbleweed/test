@@ -36,6 +36,7 @@ TEST = ${SSH} test -b /dev/vda
 TEST_START IF ${TEST} == ltp
 TEST_TYPE = test
 CHROOT_USER = /roots/suse/Tumbleweed/x86_64
+LTP_TARGETS = testcases/kernel/syscalls/getpid
 POST_BUILD_APPEND = ${BUILD_LTP}
 TEST = ${SSH} env LTPROOT=/mnt/build/ltp /mnt/build/ltp/testcases/bin/getpid01
 

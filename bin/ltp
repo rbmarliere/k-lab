@@ -9,6 +9,21 @@ if [[ -e $src/include/mk/config.mk ]]; then
 	exit 1
 fi
 
+read -r -a targets <<< "${LTP_TARGETS-}"
+for i in "${!targets[@]}"; do
+	target=${targets[i]}
+	if [[ $target == /* || ! -f $src/$target/Makefile ]]; then
+		echo "ltp: invalid source subdirectory: $target" >&2
+		exit 1
+	fi
+	dir=$(realpath -e -- "$src/$target")
+	if [[ $dir != "$src/"* ]]; then
+		echo "ltp: target must be a subdirectory of LTP_DIR: $target" >&2
+		exit 1
+	fi
+	targets[i]=${dir#"$src/"}
+done
+
 # Kernel compiler settings do not apply to LTP; use LTP_CONFIGURE_OPTIONS.
 unset ARCH CC HOSTCC HOSTCFLAGS CROSS_COMPILE
 
@@ -21,7 +36,23 @@ make -C "$src" autotools
 mkdir -p "$out"
 # shellcheck disable=SC2086 # option lists are space-separated
 run env -C "$out" "$src/configure" --prefix=/ltp $LTP_CONFIGURE_OPTIONS
-mk=(make -C "$out" -f "$src/Makefile" top_srcdir="$src" top_builddir="$out")
-# shellcheck disable=SC2086
-run "${mk[@]}" $LTP_BUILD_OPTIONS all
-run "${mk[@]}" DESTDIR="$OUTPUT_DIR" install
+
+build_install() {
+	local dir=$1
+	mkdir -p "$out/$dir"
+	local mk=(make -C "$out/$dir" -f "$src/$dir/Makefile" top_srcdir="$src" top_builddir="$out")
+	# shellcheck disable=SC2086
+	run "${mk[@]}" $LTP_BUILD_OPTIONS all
+	run "${mk[@]}" DESTDIR="$OUTPUT_DIR" install
+}
+
+if ((${#targets[@]} == 0)); then
+	build_install .
+else
+	# Refresh the common library even when a test binary already exists.
+	# shellcheck disable=SC2086
+	run make -C "$out" -f "$src/Makefile" top_srcdir="$src" top_builddir="$out" $LTP_BUILD_OPTIONS lib-all
+	for target in "${targets[@]}"; do
+		build_install "$target"
+	done
+fi

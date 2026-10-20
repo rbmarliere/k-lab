@@ -294,6 +294,7 @@ INCLUDE ../../include/ltp.conf
 DEFAULTS OVERRIDE
 ROOT_DISK = /path/to/image.img
 CHROOT_USER = /path/to/matching/rootfs
+LTP_TARGETS = testcases/kernel/syscalls/getpid
 POST_BUILD_APPEND = ${BUILD_LTP}
 
 TEST_START
@@ -311,6 +312,19 @@ the host. Kernel compiler settings do not apply. `LTP_CONFIGURE_OPTIONS`
 passes configure arguments, including explicit `--host` and `CC=...` for
 cross-builds. `LTP_BUILD_OPTIONS` passes make arguments.
 
+`LTP_TARGETS` selects source-relative directories to build and install. Empty
+means the full tree. Subset builds prepare the common LTP library first;
+other declared library dependencies are handled by LTP's makefiles. Include
+shell infrastructure and helpers explicitly, for example:
+
+```conf
+LTP_TARGETS = testcases/lib testcases/network/nfs/nfs_stress testcases/kernel/fs/fsstress
+```
+
+Subset mode skips the top-level installation; run selected tests directly.
+Existing installed files are not removed. Unknown directories and build
+failures stop the run; there is no full-build fallback.
+
 Use a fresh `TMP_DIR` after changing architecture, rootfs or compiler flags.
 
 ## Sample
@@ -327,7 +341,7 @@ kt -D TEST:=ltp tumbleweed
 
 `manual` keeps the VM running for interactive SSH access; Ctrl-C ends the run.
 The sample's `TEST` selector uses `:=`. Override `ROOT_DISK` for your image.
-Per-test rootfs overrides need an index, for example
+Per-test overrides need an index, for example
 `-D 'CHROOT_USER[1]=/path/to/rootfs'` for LTP.
 
 ## Agent skill
