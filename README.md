@@ -223,9 +223,11 @@ and snapshot settings without launching a VM.
 Set `CHROOT = /path/to/rootfs` globally or within a `TEST_START` block. Leave
 it empty to build on the host. Each make command with a nonempty `CHROOT` runs
 in an unprivileged user/mount/PID namespace with a writable overlay over that
-rootfs. `TMP_DIR` retains overlay changes; mounts vanish when the command
-exits. The rootfs is not modified. Source and output are bound in at their host
-paths, and builds use the chroot's native toolchain, not `CROSS_COMPILE`.
+rootfs. `TMP_DIR/chroot/` retains overlay changes, one overlay per rootfs path;
+mounts vanish when the command exits. The rootfs is not modified. Source and
+output are bound in at their host paths, and builds use the chroot's native
+toolchain, not `CROSS_COMPILE`. `bin/chroot` also binds the space-separated
+paths in its `CHROOT_BINDS` environment variable.
 
 The rootfs must be user-owned and contain the build dependencies. This needs
 host support for unprivileged user namespaces and OverlayFS mounts, and a

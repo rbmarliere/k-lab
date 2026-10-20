@@ -2,23 +2,28 @@
 set -e
 
 if [[ ${1-} != --mounted ]]; then
-	CHROOT=$(realpath -e -- "${CHROOT:?CHROOT is required}")
+	# An empty CHROOT runs the command on the host.
+	[[ -n ${CHROOT-} ]] || exec "$@"
+	CHROOT=$(realpath -e -- "$CHROOT")
 	TMP_DIR=$(realpath -m -- "${TMP_DIR:?TMP_DIR is required}")
-	export CHROOT TMP_DIR
-	mkdir -p "$TMP_DIR"/chroot/{upper,work,merged}
+	# One overlay per rootfs: an upper layer must not change its lower layer.
+	OVERLAY=$TMP_DIR/chroot$CHROOT
+	export CHROOT OVERLAY
+	mkdir -p "$OVERLAY"/{upper,work,merged}
 	exec unshare --user --map-root-user --mount --pid --fork --kill-child --forward-signals -- \
 		"$0" --mounted "$@"
 fi
 shift
 
-root=$TMP_DIR/chroot/merged
+root=$OVERLAY/merged
 mount -t overlay overlay \
-	-o "lowerdir=$CHROOT,upperdir=$TMP_DIR/chroot/upper,workdir=$TMP_DIR/chroot/work" "$root"
+	-o "lowerdir=$CHROOT,upperdir=$OVERLAY/upper,workdir=$OVERLAY/work" "$root"
 mkdir -p "$root"/{proc,dev,sys,tmp}
 mount -t proc proc "$root/proc"
 mount --rbind /dev "$root/dev"
 mount --rbind /sys "$root/sys"
-for dir in "$BUILD_DIR" "$OUTPUT_DIR"; do
+# shellcheck disable=SC2086 # CHROOT_BINDS is a space-separated list
+for dir in "$BUILD_DIR" "$OUTPUT_DIR" ${CHROOT_BINDS-}; do
 	mount --mkdir --rbind "$dir" "$root$dir"
 done
 
