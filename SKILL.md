@@ -21,6 +21,14 @@ Verification should pass; reproduction should trigger the specified defect on
 the unfixed tree and pass once fixed. A passing test does not establish root
 cause, and an unrelated failure is not a reproduction.
 
+## Baseline first
+
+Validate supplied paths and configured tools before investigating internals.
+Confirm substitutions for missing inputs. Once the upstream command, build
+dependencies and required kernel options are known, create the config,
+check `kt -n`, and launch one unchanged baseline. Defer history searches and
+generic CI/harness investigation until an observed failure requires them.
+
 ## Prepare the test
 
 Unless specified otherwise, use the session's initial CWD as the selected
