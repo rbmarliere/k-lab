@@ -220,10 +220,12 @@ and snapshot settings without launching a VM.
 
 ## Chroot builds
 
-Set `CHROOT = /path/to/rootfs` globally or within a `TEST_START` block. Leave
-it empty to build on the host. Each make command with a nonempty `CHROOT` runs
-in an unprivileged user/mount/PID namespace with a writable overlay over that
-rootfs. `TMP_DIR/chroot/` retains overlay changes, one overlay per rootfs path;
+Set `CHROOT_KERNEL = /path/to/rootfs` to run `MAKE_CMD` commands in that
+rootfs, including configuration, kernel builds, headers and selftests. Leave
+it empty to build on the host.
+
+Commands run in unprivileged user/mount/PID namespaces with a writable
+overlay. `TMP_DIR/chroot/` retains changes, one overlay per rootfs path;
 mounts vanish when the command exits. The rootfs is not modified. Source and
 output are bound in at their host paths, and builds use the chroot's native
 toolchain, not `CROSS_COMPILE`. `bin/chroot` also binds the space-separated
@@ -246,8 +248,8 @@ kt -D TEST:=manual tumbleweed
 ```
 
 `manual` keeps the VM running for interactive SSH access; Ctrl-C ends the run.
-The sample's `TEST` selector uses `:=`. Override `ROOT_DISK` and `CHROOT` for
-your machine.
+The sample's `TEST` selector uses `:=`. Override `ROOT_DISK` and
+`CHROOT_KERNEL` for your machine.
 
 ## Agent skill
 

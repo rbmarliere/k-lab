@@ -67,11 +67,12 @@ needed. The kernel comes from this worktree; ROOT_DISK supplies guest
 userspace.
 
 - Set foreign `ARCH := ...` before INCLUDE; disk names do not select it.
-- Use normal `=` options for ROOT_DISK, CHROOT, and CROSS_COMPILE.
-  A nonempty `CHROOT = /path/to/rootfs` selects chroot builds; an empty CHROOT
-  selects host builds. Choose the rootfs explicitly; do not derive it from
-  the disk filename or assume its packages match the guest. Chroot builds use
-  the rootfs's native toolchain and ignore CROSS_COMPILE.
+- Use normal `=` options for ROOT_DISK, CHROOT_KERNEL, and CROSS_COMPILE.
+  A nonempty `CHROOT_KERNEL = /path/to/rootfs` selects chroot builds for
+  everything run through MAKE_CMD; an empty CHROOT_KERNEL selects host
+  builds. Choose the rootfs explicitly; do not derive it from the disk
+  filename or assume its packages match the guest. Chroot builds use the
+  rootfs's native toolchain and ignore CROSS_COMPILE.
 - Guest paths are `/mnt/src` (read-only source) and `/mnt/build` (writable
   output, also the SSH working directory). Stage task files into OUTPUT_DIR on
   the host.
