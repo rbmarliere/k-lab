@@ -29,6 +29,20 @@ dependencies and required kernel options are known, create the config,
 check `kt -n`, and launch one unchanged baseline. Defer history searches and
 generic CI/harness investigation until an observed failure requires them.
 
+Before launching, record the reported failure signature from the job log:
+exact messages, source locations, failing phase and elapsed time. If the log
+is unreachable, ask the user for the relevant excerpt; do not proceed on a
+summary alone.
+
+Run the test through its own entry point with the arguments the job used,
+unmodified. Add instrumentation, loops or wrappers only after the baseline
+result is known.
+
+If ARCH differs from the host, the guest runs under QEMU TCG without KVM.
+Before launching, state this, the emulated CPU model and the expected
+slowdown as unmatched job conditions. For timing-sensitive defects, say that
+reproduction is unlikely and ask whether to proceed.
+
 ## Prepare the test
 
 Unless specified otherwise, use the session's initial CWD as the selected
@@ -44,6 +58,9 @@ Read `setup.conf` for the configured `LINUX_GIT`; consult
 `tools/testing/ktest/sample.conf` and `tools/testing/ktest/examples/README` in
 that kernel tree only for deeper ktest syntax. Do not inspect or modify harness
 source unless asked; searching the kernel code and its history is expected.
+Harness means k-lab (`bin/`, `tools/`, ktest) and the test suite's shared
+library and helpers. Read the latter only when a failure matching the reported
+signature points into it.
 
 Keep all run configuration in the test file and its includes: architecture,
 disk and rootfs paths, toolchain, resources, workspace, target selection and
@@ -147,9 +164,21 @@ userspace.
    environment. After changing those, use a fresh TMP_DIR. Keep artifacts
    out of source commits; do not delete unrelated build state.
 
-Stop after three attempts that fail to produce a usable verdict and report
-the blocker. An expected defect is a valid reproduction result, not an
-unsuccessful attempt.
+Compare every failure with the reported signature before investigating it.
+A failure in a different phase or with a different message (test-suite
+helpers, toolchain, C library, emulator) is a blocker, not evidence: report
+it with the decisive output and stop. Do not debug test-suite tooling, the C
+library, compilers or the emulator, and do not write new diagnostic programs,
+without approval.
+
+An attempt is any launch that does not reach the reported assertion. Stop
+after three and report the blocker; ask before further attempts. An expected
+defect is a valid reproduction result, not an unsuccessful attempt.
+
+Know the expected test duration from the job log. Check the first
+iteration's output before waiting on more. Bound each guest command with
+`timeout` at a small multiple of the expected time; if a step exceeds it,
+inspect it instead of extending `kt wait`.
 
 ## Boundaries and root cause
 
