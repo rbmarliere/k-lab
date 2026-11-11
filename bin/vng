@@ -13,7 +13,7 @@ args=("${VNG:-$bin/../tools/virtme-ng/vng}" --run "$kernel" \
 	--root-fstype "${VNG_ROOT_FSTYPE:-ext4}" \
 	--arch "$("$bin/cross" vng-arch "$arch")" \
 	--busybox "${BUSYBOX:-$("$bin/cross" busybox-path "$arch")}" \
-	--user root --verbose --network user \
+	--user root --verbose --network user --force-9p \
 	--rw --qemu-opts="${VNG_QEMU_OPTS--snapshot}" "$@")
 if [[ -n ${TMP_DIR-} ]]; then
 	mkdir -p -- "$TMP_DIR"
@@ -36,4 +36,5 @@ if [[ -n ${TMP_DIR-} ]]; then
 	fi
 	"${args[0]}" --dry-run "${args[@]:1}" >"$TMP_DIR/cmdline-qemu"
 fi
+echo "${args[@]}"
 exec "${args[@]}"
