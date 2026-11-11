@@ -46,7 +46,7 @@ For example, `tests/my-test/test`:
 
 ```conf
 ARCH := x86_64
-INCLUDE ../../include/defaults.conf
+INCLUDE ${THIS_DIR}/include/defaults.conf
 
 DEFAULTS OVERRIDE
 ROOT_DISK = /path/to/x86_64.img
@@ -318,8 +318,8 @@ Include `include/ltp.conf` and add `${BUILD_LTP}` to `POST_BUILD_APPEND`:
 
 ```conf
 ARCH := arm64
-INCLUDE ../../include/defaults.conf
-INCLUDE ../../include/ltp.conf
+INCLUDE ${THIS_DIR}/include/defaults.conf
+INCLUDE ${THIS_DIR}/include/ltp.conf
 
 DEFAULTS OVERRIDE
 ROOT_DISK = /path/to/aarch64.img

@@ -99,6 +99,7 @@ For build-only checks, use `TEST_TYPE = build`; no disk or guest script is
 needed. The kernel comes from this worktree; ROOT_DISK supplies guest
 userspace.
 
+- Write every INCLUDE path as `${THIS_DIR}/...`, never relative.
 - Declare `ARCH := ...` before the first INCLUDE, even for native builds;
   disk names do not select it.
 - Use normal `=` options for ROOT_DISK, CHROOT_KERNEL, and CROSS_COMPILE.
