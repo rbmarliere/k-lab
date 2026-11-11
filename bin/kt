@@ -123,6 +123,22 @@ flock -n 9 || {
 	echo "workspace in use: $state" >&2
 	exit 1
 }
+# Tests may share OUTPUT_DIR to reuse a build; allow one run per build.
+resolved=$("$dir/tools/ktest/ktest.pl" "${args[@]}" --dry-run "$file") || {
+	echo "cannot resolve options: $file" >&2
+	exit 1
+}
+output=$(sed -n 's/^OUTPUT_DIR = //p' <<<"$resolved" | head -n 1)
+[[ -n $output ]] || {
+	echo "cannot resolve OUTPUT_DIR: $file" >&2
+	exit 1
+}
+mkdir -p -- "$output"
+exec 8<"$output"
+flock -n 8 || {
+	echo "build in use: $output" >&2
+	exit 1
+}
 if (($#)); then
 	ln -sfnT -- "$(dirname -- "$file")" "$state/test"
 fi

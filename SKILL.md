@@ -120,6 +120,10 @@ userspace.
 - Extend phases with `*_APPEND`; replace a whole hook only deliberately.
 - Concurrent runs need distinct TMP_DIR values and, for VMs, VNG_PORT values.
   There is no automatic port allocation.
+- Reuse a kernel build by including its profile from `profiles/` (for
+  example `profiles/Tumbleweed-x86_64.conf`) after defaults.conf. If none
+  matches, add one (README, "Run"). Keep build-affecting settings in the
+  profile, not the test.
 - Keep default disk snapshots. Save results under `/mnt/build`; other guest
   filesystem changes disappear when the VM stops.
 - `RUN_TIMEOUT` (ktest.pl) bounds every command ktest runs via `run_command`,

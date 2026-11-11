@@ -160,6 +160,36 @@ shows the resolved path. Concurrent runs need separate config files,
 workspaces, output directories and `VNG_PORT` values. The default SSH port is
 22000; there is no automatic port allocation.
 
+Tests can share a kernel build by setting the same `OUTPUT_DIR`, while each
+keeps its own `TMP_DIR` for logs and status. `kt` also locks `OUTPUT_DIR`, so
+only one run uses a build at a time. Keep the shared settings in a build
+profile under `profiles/`, named after what it builds. Profiles are local,
+like most tests; `profiles/Tumbleweed-x86_64.conf` is the tracked example.
+
+- Everything that affects the kernel build (branch, version, config
+  fragments, toolchain) belongs in the profile. Tests that differ here
+  rebuild each other's objects.
+- `BUILD_NOCLEAN = 1` keeps runs from wiping the build. Delete `OUTPUT_DIR`
+  to force a clean build; do so after changing the toolchain, since stale
+  tools are not rebuilt.
+- Build one source tree per `OUTPUT_DIR`.
+
+A test includes the profile after `defaults.conf` and sets only its own
+resources and guest script:
+
+```conf
+ARCH := x86_64
+INCLUDE ${THIS_DIR}/include/defaults.conf
+INCLUDE ${THIS_DIR}/profiles/Tumbleweed-x86_64.conf
+
+DEFAULTS OVERRIDE
+POST_BUILD_APPEND = cp ${THIS_DIR}/tests/my-test/run.sh ${OUTPUT_DIR}/run.sh
+
+TEST_START
+TEST_TYPE = test
+TEST = ${SSH} sh ./run.sh
+```
+
 ## Logs and artifacts
 
 `TMP_DIR` contains the following logs:

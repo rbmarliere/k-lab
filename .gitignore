@@ -3,3 +3,5 @@ tmp/*
 tools/*
 !tools/.gitkeep
 virtme-ng
+profiles/*
+!profiles/Tumbleweed-x86_64.conf
