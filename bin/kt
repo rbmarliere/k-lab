@@ -66,6 +66,7 @@ file=$(realpath -- "$file")
 if [[ -z $state ]]; then
 	tree=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 	name=${file#"$dir/"}
+	name=${name#tests/}
 	name=$(printf '%s' "${tree##*/}-$name" | tr -c 'A-Za-z0-9_.-' '_')
 	state=$dir/tmp/$name
 fi
