@@ -4,6 +4,35 @@ Kernel build/boot/test loops with `ktest.pl` and `virtme-ng`. ktest handles
 builds, monitoring, iteration, bisect and patchcheck; vng boots the kernel
 against a disk image with `--root-disk`.
 
+## Why k-lab?
+
+Checking a kernel change usually means building it, booting it with suitable
+userspace, running a reproducer or test suite, and inspecting the result.
+Checking a fix repeats that cycle; finding a regression may repeat it across
+many revisions.
+
+k-lab connects these steps through a test configuration. You work in the
+kernel source tree you want to test, while ktest.pl drives the build and
+test sequence and virtme-ng boots the resulting kernel in a VM. The test
+command runs over SSH, and ktest records its result and logs.
+
+```text
+kernel worktree + test configuration
+                 |
+               build
+                 |
+       boot with your userspace image
+                 |
+        run test command over SSH
+                 |
+           result and logs
+```
+
+You provide the userspace image and the test, which can be a small
+reproducer script or a suite such as kselftests or LTP. The image supplies
+userspace, not the kernel under test: there is no need to install each
+kernel revision into it.
+
 ## Setup
 
 Optionally edit `setup.conf`: `SUSE_KERNEL_SOURCE_GIT` supplies SUSE configs,
