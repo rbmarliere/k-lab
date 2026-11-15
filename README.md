@@ -6,8 +6,9 @@ against a disk image with `--root-disk`.
 
 ## Setup
 
-Edit `setup.conf`: `THIS_DIR` is this checkout, `LINUX_GIT` supplies ktest, and
-optional `SUSE_KERNEL_SOURCE_GIT` supplies SUSE configs. Then:
+Edit `setup.conf`: `LINUX_GIT` supplies ktest, and optional
+`SUSE_KERNEL_SOURCE_GIT` supplies SUSE configs. `kt` determines its checkout
+path (`THIS_DIR`) automatically. Then:
 
 ```bash
 ./setup.sh
