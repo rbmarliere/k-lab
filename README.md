@@ -29,7 +29,9 @@ cd tools/busybox-static-builder
 ./build x86_64
 ```
 
-Set `BUSYBOX = /path/to/static/busybox` in the test config when needed.
+Set `BUSYBOX = /path/to/static/busybox` in `setup.conf` or a test config to
+use another binary. Paths can use `${KLAB_ARCH}` (for example `arm64` or
+`x86_64`) to select a binary per architecture.
 Set `VNG = /path/to/vng` there to select a different executable.
 Install the build tools and vng dependencies yourself; see the
 [vng documentation](https://github.com/arighi/virtme-ng#readme).
