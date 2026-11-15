@@ -35,11 +35,10 @@ Install the build tools and vng dependencies yourself; see the
 ## Tests
 
 Write a separate test under `tests/` for each task. Keep its ktest config,
-fragments, and reproducer files together. Put all run configuration in that
-file and its includes: architecture, disk and rootfs paths, toolchain,
-resources, workspace, target selection and iteration counts. Do not use
-`kt -D` or shell environment assignments to configure a launch. Create a
-separate config file for each variant.
+fragments, and reproducer files together. Keep run settings in that file and
+its includes: architecture, disk and rootfs paths, toolchain, resources,
+target selection and iteration counts. Use separate config files for variants.
+Do not use shell environment assignments to configure a launch.
 
 Always declare `ARCH` before the first `INCLUDE`, including native builds.
 For example, `tests/my-test/test`:
@@ -99,13 +98,14 @@ active database. Set `COMPILE_COMMANDS = 0` in the test config to disable
 generation and leave any existing link unchanged.
 
 Select a test by its name under `tests/`, a config path, or a directory
-containing a `test` file. Command-line flags control execution, not the test
-configuration:
+containing a `test` file. Command-line flags control execution and provide
+advanced overrides:
 
 - `-C` sets `BUILD_NOCLEAN=1`; `-n` prints resolved options; `-y` disconnects
   stdin.
 - `-b` runs in the background, implies `-y`, and captures stdout/stderr in
   `TMP_DIR/ktlog`.
+- `-D` passes option overrides to ktest.
 
 Background runs support immediate status checks and bounded waits:
 
@@ -154,11 +154,11 @@ chroot when using chroot builds.
 parallelism or additional targets. It does not apply to configuration or other
 make invocations and is not exported to hooks.
 
-`TMP_DIR` defaults to `tmp/<worktree>-<config>` and is protected by `flock`.
-Set `TMP_DIR` in the test config if a different workspace is needed; `kt -n`
-shows the resolved path. Concurrent runs need separate config files,
-workspaces, output directories and `VNG_PORT` values. The default SSH port is
-22000; there is no automatic port allocation.
+`kt` manages `TMP_DIR`, choosing `tmp/<worktree>-<config>` under the k-lab
+checkout and protecting it with `flock`. Do not set `TMP_DIR` in the test
+config; `kt -n` shows the resolved path. Concurrent runs need separate config
+files, workspaces, output directories and `VNG_PORT` values. The default SSH
+port is 22000; there is no automatic port allocation.
 
 Tests can share a kernel build by setting the same `OUTPUT_DIR`, while each
 keeps its own `TMP_DIR` for logs and status. `kt` also locks `OUTPUT_DIR`, so
@@ -359,10 +359,11 @@ Subset mode skips the top-level installation; run selected tests directly.
 Existing installed files are not removed. Unknown directories and build
 failures stop the run; there is no full-build fallback.
 
-Use a fresh `TMP_DIR` (or `LTP_BUILD_DIR` if explicitly set) after changing
-architecture, build root, toolchain or compiler flags. After installing or
-updating build dependencies, remove `LTP_BUILD_DIR/config.cache` before the
-next build so configure refreshes its probe results.
+Use a separate config file to get a fresh workspace after changing
+architecture, build root, toolchain or compiler flags. If `LTP_BUILD_DIR` is
+explicitly set, use a fresh directory too. After installing or updating build
+dependencies, remove `LTP_BUILD_DIR/config.cache` before the next build so
+configure refreshes its probe results.
 
 ## Sample
 

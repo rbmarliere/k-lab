@@ -63,11 +63,11 @@ library and helpers. Read the latter only when a failure matching the reported
 signature points into it.
 
 Keep all run configuration in the test file and its includes: architecture,
-disk and rootfs paths, toolchain, resources, workspace, target selection and
-iteration counts. Never use `kt -D` or shell-prefix environment assignments
-to supply test settings at launch. The command line selects the config and
-controls execution (`-n`, `-b`, `-C`, `-y`, and wait `-t`). Use separate
-config files for variants rather than command-line overrides.
+disk and rootfs paths, toolchain, resources, target selection and iteration
+counts. Never use `kt -D` or shell-prefix environment assignments to supply
+test settings at launch. The command line selects the config and controls
+execution (`-n`, `-b`, `-C`, `-y`, and wait `-t`). Use separate config files
+for variants rather than command-line overrides.
 
 Throughout this skill, `kt` means the resolved absolute path to `bin/kt`.
 Run it directly from the kernel worktree root; do not source `k-lab.sh` or
@@ -119,8 +119,9 @@ userspace.
   output, also the SSH working directory). Stage task files into OUTPUT_DIR on
   the host.
 - Extend phases with `*_APPEND`; replace a whole hook only deliberately.
-- Concurrent runs need distinct TMP_DIR values and, for VMs, VNG_PORT values.
-  There is no automatic port allocation.
+- `kt` manages `TMP_DIR`; do not set it in the config. `kt -n` shows its path.
+  Concurrent runs need distinct workspaces, output directories and, for VMs,
+  `VNG_PORT` values. There is no automatic port allocation.
 - Reuse a kernel build by including its profile from `profiles/` (for
   example `profiles/Tumbleweed-x86_64.conf`) after defaults.conf. If none
   matches, add one (README, "Run"). Keep build-affecting settings in the
@@ -166,8 +167,9 @@ userspace.
    even for an unmodified tree; use it only for the first build of a test or
    after `ARCH`/compiler/build-environment changes. Reuse `-C` for every
    other relaunch with the same architecture, compiler, and build
-   environment. After changing those, use a fresh TMP_DIR. Keep artifacts
-   out of source commits; do not delete unrelated build state.
+   environment. After changing those, use a separate config file to get a
+   fresh workspace. Keep artifacts out of source commits; do not delete
+   unrelated build state.
 
 Compare every failure with the reported signature before investigating it.
 A failure in a different phase or with a different message (test-suite
