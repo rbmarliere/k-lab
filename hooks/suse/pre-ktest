@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
 set -e
 
-VERSION=${VERSION-}
-PATCHLEVEL=${PATCHLEVEL-}
+SUSE_VERSION=${SUSE_VERSION-}
+SUSE_PATCHLEVEL=${SUSE_PATCHLEVEL-}
 
 OUTPUT="$TMP_DIR"/min.config
 
-if [[ -n $VERSION || -n $PATCHLEVEL ]]; then
-	if [[ -z $VERSION || -z $PATCHLEVEL ]]; then
-		echo "ERROR: VERSION and PATCHLEVEL must be set together" >&2
+if [[ -n $SUSE_VERSION || -n $SUSE_PATCHLEVEL ]]; then
+	if [[ -z $SUSE_VERSION || -z $SUSE_PATCHLEVEL ]]; then
+		echo "ERROR: SUSE_VERSION and SUSE_PATCHLEVEL must be set together" >&2
 		exit 1
 	fi
 
 	"$BUILD_DIR"/scripts/config \
 		--file "$OUTPUT" \
 		--enable SUSE_PRODUCT_SLE \
-		--set-val SUSE_VERSION "$VERSION" \
-		--set-val SUSE_PATCHLEVEL "$PATCHLEVEL" \
+		--set-val SUSE_VERSION "$SUSE_VERSION" \
+		--set-val SUSE_PATCHLEVEL "$SUSE_PATCHLEVEL" \
 		--disable SUSE_KERNEL_SUPPORTED \
 		--disable SUSE_HAVE_STABLE_KABI
 else

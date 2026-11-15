@@ -7,7 +7,7 @@ against a disk image with `--root-disk`.
 ## Setup
 
 Edit `setup.conf`: `THIS_DIR` is this checkout, `LINUX_GIT` supplies ktest, and
-optional `KSOURCE_GIT` supplies SUSE configs. Then:
+optional `SUSE_KERNEL_SOURCE_GIT` supplies SUSE configs. Then:
 
 ```bash
 ./setup.sh
@@ -61,9 +61,9 @@ build-only check, use `TEST_TYPE = build`; no image or guest script is needed.
 Extend phase hooks with their corresponding `*_APPEND` options.
 
 Include `include/suse.conf` after defaults for SUSE product configuration. Set
-`BRANCH = stable` or the relevant config-tree directory. `FLAVOR` selects the
-config filename and defaults to `default`. Leave `VERSION` and `PATCHLEVEL`
-unset for Tumbleweed, or set both for SLE.
+`SUSE_BRANCH = stable` or the relevant config-tree directory. `SUSE_FLAVOR`
+selects the config filename and defaults to `default`. Leave `SUSE_VERSION` and
+`SUSE_PATCHLEVEL` unset for Tumbleweed, or set both for SLE.
 
 The SUSE include supplies the flavor through `ADD_CONFIG`. To add test-specific
 fragments without replacing it, retain the inherited list after `TEST_START`:
