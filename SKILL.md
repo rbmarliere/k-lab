@@ -53,11 +53,10 @@ Resolve this `SKILL.md` once with `realpath` to follow symlinks. Its containing
 directory is the k-lab checkout. Resolve k-lab file references below against
 that directory, not the kernel worktree; do not search for another checkout.
 
-Read `README.md` for current usage, options, and SUSE configuration.
-Read `setup.conf` for the configured `LINUX_GIT`; consult
-`tools/testing/ktest/sample.conf` and `tools/testing/ktest/examples/README` in
-that kernel tree only for deeper ktest syntax. Do not inspect or modify harness
-source unless asked; searching the kernel code and its history is expected.
+Read `README.md` for current usage, options, and SUSE configuration. Consult
+ktest's sample.conf and examples linked there only for deeper ktest syntax.
+Do not inspect or modify harness source unless asked; searching the kernel
+code and its history is expected.
 Harness means k-lab (`bin/`, `tools/`, ktest) and the test suite's shared
 library and helpers. Read the latter only when a failure matching the reported
 signature points into it.

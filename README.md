@@ -6,18 +6,19 @@ against a disk image with `--root-disk`.
 
 ## Setup
 
-Edit `setup.conf`: `LINUX_GIT` supplies ktest, and optional
-`SUSE_KERNEL_SOURCE_GIT` supplies SUSE configs. `kt` determines its checkout
-path (`THIS_DIR`) automatically. Then:
+Optionally edit `setup.conf`: `SUSE_KERNEL_SOURCE_GIT` supplies SUSE configs,
+and `LTP_GIT` supplies LTP. `kt` determines its checkout path (`THIS_DIR`)
+automatically. Then:
 
 ```bash
 ./setup.sh
 source /path/to/k-lab/k-lab.sh
 ```
 
-Setup links ktest and clones missing virtme-ng and busybox-builder checkouts.
-It does not install packages or provision root filesystems. Existing local
-checkouts can be symlinked into `tools/` instead.
+Setup downloads the latest upstream `ktest.pl` and `config-bisect.pl` into
+`tools/ktest/` on every run and clones missing virtme-ng and busybox-builder
+checkouts. It does not install packages or provision root filesystems.
+Existing local checkouts can be symlinked into `tools/` instead.
 
 Provide a static busybox for every guest architecture. On openSUSE, the
 external builder can prepare dependencies and build it:
