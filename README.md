@@ -164,9 +164,10 @@ cleanup (for example, SIGKILL) have no completed exit status.
 
 Set `ARCH := ...` before the first `INCLUDE` in each test config. Supported
 kernel architecture names are `x86_64`, `arm64`, `arm`, `powerpc`, `s390`, and
-`riscv`. Disk names and chroot contents do not select it. Foreign host builds
-use SUSE compiler prefixes by default; set `CROSS_COMPILE = ...` in the config
-if a different prefix is needed.
+`riscv`. Disk names and chroot contents do not select it. `CROSS_COMPILE`
+defaults to empty; k-lab does not infer a compiler prefix from `ARCH`. Set
+it explicitly in the test or build profile for GCC cross-builds, for example
+`CROSS_COMPILE = aarch64-linux-gnu-`.
 
 `CC`, `HOSTCC`, and `HOSTCFLAGS` apply to every `MAKE_CMD` invocation. Empty
 values leave the makefile defaults in effect; nonempty values are passed as make

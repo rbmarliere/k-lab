@@ -102,6 +102,8 @@ userspace.
 - Declare `ARCH := ...` before the first INCLUDE, even for native builds;
   disk names do not select it.
 - Use normal `=` options for ROOT_DISK, CHROOT_KERNEL, and CROSS_COMPILE.
+  CROSS_COMPILE defaults to empty; set the prefix explicitly in the test
+  or build profile for host GCC cross-builds.
   A nonempty `CHROOT_KERNEL = /path/to/rootfs` selects chroot builds for
   everything run through MAKE_CMD; an empty CHROOT_KERNEL selects host
   builds. Choose the rootfs explicitly; do not derive it from the disk

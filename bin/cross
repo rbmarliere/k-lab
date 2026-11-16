@@ -3,28 +3,24 @@ set -e
 
 command=${1:?usage: cross <command> <arch>}
 case ${2:-x86_64} in
-x86_64 | amd64 | x86) row='x86_64 amd64 x86_64 arch/x86/boot/bzImage x86_64-suse-linux- x86_64' ;;
-arm64 | aarch64) row='arm64 arm64 aarch64 arch/arm64/boot/Image aarch64-suse-linux- arm64' ;;
-arm | armhf | armv7l) row='arm armhf armv7l arch/arm/boot/zImage arm-suse-linux-gnueabi- armv7hl' ;;
-powerpc | ppc64le | ppc64el) row='powerpc ppc64el ppc64le vmlinux powerpc64le-suse-linux- ppc64le' ;;
-s390 | s390x) row='s390 s390x s390x arch/s390/boot/bzImage s390x-suse-linux- s390x' ;;
-riscv | riscv64) row='riscv riscv64 riscv64 arch/riscv/boot/Image riscv64-suse-linux- riscv64' ;;
+x86_64 | amd64 | x86) row='x86_64 amd64 arch/x86/boot/bzImage x86_64' ;;
+arm64 | aarch64) row='arm64 arm64 arch/arm64/boot/Image arm64' ;;
+arm | armhf | armv7l) row='arm armhf arch/arm/boot/zImage armv7hl' ;;
+powerpc | ppc64le | ppc64el) row='powerpc ppc64el vmlinux ppc64le' ;;
+s390 | s390x) row='s390 s390x arch/s390/boot/bzImage s390x' ;;
+riscv | riscv64) row='riscv riscv64 arch/riscv/boot/Image riscv64' ;;
 *)
 	echo "unsupported architecture: $2" >&2
 	exit 1
 	;;
 esac
-read -r arch vng uname image compiler suse <<<"$row"
+read -r arch vng image suse <<<"$row"
 
 case $command in
 normalize-arch) echo "$arch" ;;
 vng-arch) echo "$vng" ;;
 build-target) echo "$image" ;;
 suse-arch) echo "$suse" ;;
-cross-compile)
-	[[ $uname == "$(uname -m)" ]] || echo "$compiler"
-	exit 0
-	;;
 busybox-path)
 	dir=$(dirname -- "$(dirname -- "$(realpath -- "$0")")")
 	echo "${BUSYBOX_DIR:-$dir/tools/busybox-static-builder}/$arch/bin/busybox"
