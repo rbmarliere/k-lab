@@ -328,22 +328,40 @@ SELFTEST_TARGETS = fchmodat2
 POST_BUILD_APPEND = ${BUILD_SELFTESTS}
 ```
 
-Headers are generated through `MAKE_CMD`; the selected collections build
-in `CHROOT_USER`, including their test modules. `O` and `KDIR` point at the
-prepared kernel output. Build output uses kselftest's default,
-`OUTPUT_DIR/kselftest`; module output follows each collection's rules.
-Installed tests remain at `/mnt/build/kselftest/kselftest_install`. The
-build root needs the collection's dependencies, including `make`, a compiler
-and `rsync`.
+`SELFTEST_SOURCE` defaults to `BUILD_DIR`. Set it to another complete Linux
+source tree to build newer collections without changing the kernel under test:
 
-`SELFTEST_BUILD_OPTIONS` passes make arguments, including userspace compiler
-settings. Kernel `CC`, `HOSTCC` and `HOSTCFLAGS` do not apply. Host builds use
-`CROSS_COMPILE`; chroot builds use the rootfs's native toolchain. Kernel
-cleaning may also remove selftest intermediates.
+```conf
+SELFTEST_SOURCE = /path/to/linux-mainline
+SELFTEST_TARGETS = mm net
+```
 
-Module builds need a toolchain that supports the selected kernel and must
-be able to run its build helpers. Build errors are reported normally; there
-is no automatic fallback to another root.
+Keep that checkout at the revision you want; k-lab does not fetch or update it.
+The source path and Git revision are logged before building headers. Use a
+separate test config when changing source trees so intermediates are not shared.
+
+Headers from `SELFTEST_SOURCE` are generated into `TMP_DIR/selftests/headers`,
+then the selected collections build with userspace intermediates in
+`TMP_DIR/selftests/build`. Both steps run in `CHROOT_USER`, with external source
+and workspace paths bound into the chroot. `O` and `KDIR` still point at
+the prepared output of the kernel under test for module builds; module output
+follows each collection's rules.
+
+Installed tests remain at `/mnt/build/kselftest/kselftest_install`. The build
+root needs the collection's dependencies, including `make`, a compiler and
+`rsync`.
+
+`SELFTEST_BUILD_OPTIONS` passes make arguments to both header generation and
+collection builds, including compiler settings such as `CC=gcc-15 HOSTCC=gcc-15`.
+Kernel `MAKE_CMD`, `CC`, `HOSTCC` and `HOSTCFLAGS` settings do not apply. Host
+builds use `CROSS_COMPILE`; chroot builds use the rootfs's native toolchain.
+Kernel cleaning does not remove the separate userspace/header intermediates.
+
+Mainline userspace tests are intended to run on older kernels, skipping
+unsupported features. Test modules may not build against older internal kernel
+APIs. Module builds need a toolchain that supports the selected kernel and
+must be able to run its build helpers. Build errors are reported normally;
+there is no automatic fallback to another source tree or build root.
 
 ## LTP
 

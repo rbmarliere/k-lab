@@ -5,7 +5,13 @@ set -e
 BUILD_DIR=$(realpath -e -- "${BUILD_DIR:?BUILD_DIR is required}")
 OUTPUT_DIR=$(realpath -e -- "${OUTPUT_DIR:?OUTPUT_DIR is required}")
 export BUILD_DIR OUTPUT_DIR
-src=$BUILD_DIR/tools/testing/selftests
+source=$(realpath -e -- "${SELFTEST_SOURCE:-$BUILD_DIR}")
+src=$source/tools/testing/selftests
+work=$(realpath -m -- "${TMP_DIR:?TMP_DIR is required}/selftests")
+[[ -f $source/Makefile && -f $src/Makefile ]] || {
+	echo 'selftests: SELFTEST_SOURCE must name a Linux source tree' >&2
+	exit 1
+}
 read -r -a targets <<< "${SELFTEST_TARGETS:?SELFTEST_TARGETS is required}"
 ((${#targets[@]})) || {
 	echo 'selftests: SELFTEST_TARGETS is empty' >&2
@@ -19,18 +25,24 @@ for target in "${targets[@]}"; do
 	fi
 done
 
-[[ -d $OUTPUT_DIR/usr/include ]] || {
-	echo 'selftests: generate UAPI headers with MAKE_CMD first' >&2
-	exit 1
-}
-mk=(make -C "$src")
+mkdir -p "$work/headers"
+export CHROOT_BINDS="$source $work ${CHROOT_BINDS-}"
+printf 'Selftest source: %s (%s)\n' "$source" \
+	"$(git -C "$source" rev-parse HEAD 2>/dev/null || echo unversioned)"
+
+mk=(make)
 if [[ -z ${CHROOT_USER-} && -n ${CROSS_COMPILE-} ]]; then
 	mk+=("CROSS_COMPILE=$CROSS_COMPILE")
 fi
-mk+=("$@" O="$OUTPUT_DIR" KDIR="$OUTPUT_DIR" "ARCH=${ARCH:?ARCH is required}"
-	"KHDR_INCLUDES=-isystem $OUTPUT_DIR/usr/include"
-	"KSFT_INSTALL_PATH=$OUTPUT_DIR/kselftest/kselftest_install"
-	SKIP_TARGETS= "TARGETS=${targets[*]}" FORCE_TARGETS=1 install)
-
+mk+=("$@" "ARCH=${ARCH:?ARCH is required}")
 unset ARCH CC HOSTCC HOSTCFLAGS CROSS_COMPILE KBUILD_OUTPUT
-CHROOT=${CHROOT_USER-} "$BIN"/chroot "${mk[@]}"
+
+run() {
+	CHROOT=${CHROOT_USER-} "$BIN"/chroot "${mk[@]}" "$@"
+}
+
+run -C "$source" O="$work/headers" headers
+run -C "$src" O="$OUTPUT_DIR" KDIR="$OUTPUT_DIR" \
+	"BUILD=$work/build" "KHDR_INCLUDES=-isystem $work/headers/usr/include" \
+	"KSFT_INSTALL_PATH=$OUTPUT_DIR/kselftest/kselftest_install" \
+	SKIP_TARGETS= "TARGETS=${targets[*]}" FORCE_TARGETS=1 install
