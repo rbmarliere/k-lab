@@ -210,6 +210,10 @@ inspect it instead of extending `kt wait`.
 - Ask before original shared/core code, a whole-series backport, ABI/kABI
   changes, or a fix whose correctness the available evidence cannot establish.
   Symptom suppression and a correct fix are separate claims.
+- Fix verification: if testing a candidate fix needs a tree other than the
+  given worktree, do not create one. Report the reproduction, describe the
+  fix, and request a decision (apply in the existing worktree, an approved
+  scratch worktree, or skip).
 
 ## Report
 
