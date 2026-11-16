@@ -44,10 +44,11 @@ automatically. Then:
 source /path/to/k-lab/k-lab.sh
 ```
 
-Setup downloads the latest upstream `ktest.pl` and `config-bisect.pl` into
-`tools/ktest/` on every run and clones missing virtme-ng and busybox-builder
-checkouts. It does not install packages or provision root filesystems.
-Existing local checkouts can be symlinked into `tools/` instead.
+Setup downloads the latest upstream `ktest.pl`, `config-bisect.pl`,
+`sample.conf`, and `examples/` into `tools/ktest/` on every run and clones
+missing virtme-ng and busybox-builder checkouts. It does not install
+packages or provision root filesystems. Existing local checkouts can be
+symlinked into `tools/` instead.
 
 Provide a static busybox for every guest architecture. On openSUSE, the
 external builder can prepare dependencies and build it:

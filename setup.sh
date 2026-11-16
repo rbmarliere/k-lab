@@ -3,12 +3,22 @@ set -e
 
 dir=$(dirname -- "$(realpath -- "$0")")
 if [[ ! -L $dir/tools/ktest ]]; then
-	mkdir -p "$dir/tools/ktest"
 	url=https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/tools/testing/ktest
-	for file in ktest.pl config-bisect.pl; do
-		curl -fL "$url/$file" -o "$dir/tools/ktest/$file.tmp"
-		chmod +x "$dir/tools/ktest/$file.tmp"
-		mv -- "$dir/tools/ktest/$file.tmp" "$dir/tools/ktest/$file"
+	for file in \
+		ktest.pl config-bisect.pl sample.conf \
+		examples/README \
+		examples/{crosstests,kvm,snowball,test,vmware}.conf \
+		examples/include/{bisect,bootconfig,defaults,min-config,patchcheck,tests}.conf \
+		examples/bootconfigs/{boottrace,functiongraph,tracing}.bconf \
+		examples/bootconfigs/config-bootconfig \
+		examples/bootconfigs/verify-{boottrace,functiongraph,tracing}.sh; do
+		dest=$dir/tools/ktest/$file
+		mkdir -p -- "$(dirname -- "$dest")"
+		curl -fL "$url/$file" -o "$dest.tmp"
+		case $file in
+			*.pl|*.sh) chmod +x "$dest.tmp" ;;
+		esac
+		mv -- "$dest.tmp" "$dest"
 	done
 fi
 [[ -e $dir/tools/virtme-ng ]] ||
