@@ -3,7 +3,7 @@ set -e
 
 dir=$(dirname -- "$(dirname -- "$(realpath -- "$0")")")
 action=run
-if [[ ${1-} == wait || ${1-} == status ]]; then
+if [[ ${1-} == wait || ${1-} == status || ${1-} == kill ]]; then
 	action=$1
 	shift
 fi
@@ -29,6 +29,7 @@ while getopts ':bCD:hnyt:' opt; do
 	h)
 		echo 'usage: kt [-b] [-C] [-D name=value] [-n] [-y] [test]'
 		echo '       kt <wait|status> [-t seconds] [test]'
+		echo '       kt kill [test]'
 		exit 0
 		;;
 	*)
@@ -48,7 +49,7 @@ shift $((OPTIND - 1))
 }
 if [[ $action != run && ( $background == 1 || $dry_run == 1 ) ]] ||
    [[ $background == 1 && $dry_run == 1 ]]; then
-	echo 'cannot combine wait/status, -b, and -n' >&2
+	echo 'cannot combine wait/status/kill, -b, and -n' >&2
 	exit 2
 fi
 
@@ -92,6 +93,22 @@ summary() {
 	[[ $code == exit=* ]] || return 1
 	return "${code#exit=}"
 }
+
+if [[ $action == kill ]]; then
+	# Every run process inherits fd 9; include survivors of a dead runner.
+	pids=()
+	for fd in /proc/[0-9]*/fd/9; do
+		[[ $fd -ef $state/lock ]] || continue
+		p=${fd#/proc/}
+		pids+=("${p%%/*}")
+	done
+	((${#pids[@]})) || {
+		echo "no active ktest run: $state" >&2
+		exit 1
+	}
+	kill -TERM -- "${pids[@]}" 2>/dev/null || true
+	exit 0
+fi
 
 if [[ $action != run ]]; then
 	[[ -f $state/lock ]] || {

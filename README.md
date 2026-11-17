@@ -350,7 +350,9 @@ actual launch.
 `kt -n <test>` prints configured RAM, CPUs (`VNG_ARGS`), disk, architecture,
 and snapshot settings without launching a VM.
 
-`bin/kt-kill <TMP_DIR>` requests graceful cancellation of the whole run.
+`kt kill [test]` requests graceful cancellation of the whole run. Like
+`status` and `wait`, run it from the same kernel worktree with the same test
+config used for launch.
 
 ## Chroot builds
 
