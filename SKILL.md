@@ -55,6 +55,8 @@ that directory, not the kernel worktree; do not search for another checkout.
 
 Read `README.md` for current usage, options, and SUSE configuration. Consult
 ktest's sample.conf and examples linked there only for deeper ktest syntax.
+The README is the usage reference; the restrictions below govern agent
+workflow, not which features the public interface supports.
 Do not inspect or modify harness source unless asked; searching the kernel
 code and its history is expected.
 Harness means k-lab (`bin/`, `tools/`, ktest) and the test suite's shared
@@ -94,63 +96,27 @@ Keep the output of setup and preceding steps (in the test log or under
 `/mnt/build`) rather than discarding it, and record the relevant system state
 immediately before the assertion when the defect may depend on resources.
 
-Minimal boot-test config (replace `example` and the image path):
-
-```conf
-ARCH := x86_64
-INCLUDE ${THIS_DIR}/include/defaults.conf
-
-DEFAULTS OVERRIDE
-ROOT_DISK = /path/to/x86_64.img
-POST_BUILD_APPEND = cp ${THIS_DIR}/tests/example/run.sh ${OUTPUT_DIR}/run.sh
-
-TEST_START
-TEST_TYPE = test
-TEST = ${SSH} sh ./run.sh
-```
-
-For build-only checks, use `TEST_TYPE = build`; no disk or guest script is
-needed. The kernel comes from this worktree; ROOT_DISK supplies guest
-userspace.
+Use the README's configuration examples and build helpers. Apply these
+workflow safeguards:
 
 - Write every INCLUDE path as `${THIS_DIR}/...`, never relative.
-- Declare `ARCH := ...` before the first INCLUDE, even for native builds;
-  disk names do not select it.
-- Use normal `=` options for ROOT_DISK, CHROOT_KERNEL, and CROSS_COMPILE.
-  CROSS_COMPILE defaults to empty; set the prefix explicitly in the test
-  or build profile for host GCC cross-builds.
-  A nonempty `CHROOT_KERNEL = /path/to/rootfs` selects chroot builds for
-  everything run through MAKE_CMD; an empty CHROOT_KERNEL selects host
-  builds. Choose the rootfs explicitly; do not derive it from the disk
-  filename or assume its packages match the guest. Chroot builds use the
-  rootfs's native toolchain and ignore CROSS_COMPILE. Build guest programs
-  with `${RUN_USER}`; `CHROOT_USER` (default CHROOT_KERNEL) selects their
-  root, so the kernel can build on the host while they build against the
-  guest's libraries. `${BUILD_SELFTESTS}` generates UAPI headers and builds
-  complete collections, including test modules, in `CHROOT_USER`;
-  module builds use the prepared kernel output through `O` and `KDIR`.
-  A rootfs not owned entirely by the invoking user fails with mount or
-  permission errors; report it as a setup blocker.
-- Guest paths are `/mnt/src` (read-only source) and `/mnt/build` (writable
-  output, also the SSH working directory). Stage task files into OUTPUT_DIR on
-  the host.
-- Extend phases with `*_APPEND`; replace a whole hook only deliberately.
-- `kt` manages `TMP_DIR`; do not set it in the config. `kt -n` shows its path.
-  Conditional variants in one config share that workspace; the selector does
-  not isolate runs. Concurrent runs need distinct workspaces, output
-  directories and, for VMs, `VNG_PORT` values. There is no automatic port
-  allocation.
-- Reuse a kernel build by including its profile from `profiles/` (for
-  example `profiles/Tumbleweed-x86_64.conf`) after defaults.conf. If none
-  matches, add one (README, "Run"). Keep build-affecting settings in the
-  profile, not the test.
-- Keep default disk snapshots. Save results under `/mnt/build`; other guest
-  filesystem changes disappear when the VM stops.
-- `RUN_TIMEOUT` (ktest.pl) bounds every command ktest runs via `run_command`,
-  including `make mrproper`/the build itself, not just the final SSH test
-  command. A value sized for the test step alone can abort mid-build. Leave
-  it unset unless it is also sized for a from-scratch build, and prefer `-C`
-  (reuse build objects) over tightening `RUN_TIMEOUT` to avoid rebuild stalls.
+- Choose the architecture, disk, build roots and toolchain explicitly. Do not
+  infer a build root or compiler from an image filename, or assume a rootfs
+  has the guest's libraries and build dependencies.
+- Stage task files into OUTPUT_DIR. Extend phases with `*_APPEND`; replace a
+  whole hook only deliberately.
+- Reuse a matching build profile from `profiles/`; add one if none matches.
+  Keep build-affecting settings there, and give incompatible variants their
+  own build output rather than changing a build shared by other tests.
+- Let `kt` manage `TMP_DIR`. Before concurrent runs, check workspace, output
+  directory and VM port isolation as described in the README.
+- Keep default disk snapshots and save artifacts in the exported build output.
+  Use the run's `TMP_DIR/ssh` helper rather than assembling a separate SSH
+  command with independently configured settings.
+- Report rootfs ownership, mount and dependency errors as setup blockers;
+  do not repair the build environment without approval.
+- Leave `RUN_TIMEOUT` unset unless it accommodates a from-scratch build.
+  Bound guest commands separately rather than using a short global timeout.
 
 ## Run and iterate
 
@@ -158,20 +124,14 @@ userspace.
    including RAM, CPUs (`VNG_ARGS`), `--systemd`, disk, architecture, and
    snapshot settings.
 2. Run `kt -b <name>/test` for long runs; retain the reported TMP_DIR and
-   `ktlog` path. Use `kt -y <name>/test` for foreground runs. Without `-C`,
-   every launch (including any relaunch of the same test, e.g. after a kill
-   or a wait timeout) runs `make mrproper` first and rebuilds from scratch;
-   pass `-C` to reuse existing build objects whenever the kernel tree and
-   build environment have not changed.
-3. Use `kt wait -t 240 <name>/test` for bounded waits. Repeat while it reports
-   `status=running` and returns 124. Use `kt status <name>/test` for an immediate
-   check; it returns 0 even while running, so check the reported status rather
-   than the return code alone. Run both commands from the same kernel worktree
-   as the launch, with the same config file. Keep that config unchanged until
-   the run finishes. A timed-out wait leaves the run active; do not relaunch
-   it or start a conflicting run. Confirm completion (`exit=<code>`) before
-   interpreting results; a runner exit code or log pattern alone is not a
-   kernel verdict.
+   `ktlog` path. Use `kt -y <name>/test` for foreground runs.
+3. Use `kt wait -t 240 <name>/test` for bounded waits and `kt status <name>/test`
+   for immediate checks, from the same kernel worktree and with the same
+   config as the launch. Keep the config unchanged while the run is active;
+   check the reported status, not the command return code alone. A wait
+   timeout is not completion or permission to relaunch; continue waiting on
+   the existing run. Confirm completion (`exit=<code>`) before interpreting
+   results; a runner exit code or log pattern alone is not a kernel verdict.
 4. Inspect the focused log for the failed phase rather than searching combined
    output: start with the test log for assertions, build log for compiler
    errors, VM log for boot problems, or runner log for background launch
@@ -181,13 +141,10 @@ userspace.
    `ktestlog` for ktest's phase decisions and the captured guest output for
    kernel diagnostics. For VM environment mismatches, inspect the recorded vng
    invocation and QEMU preview rather than bypassing the wrapper.
-5. Default (`-C` omitted) always does a full clean rebuild (`make mrproper`),
-   even for an unmodified tree; use it only for the first build of a test or
-   after `ARCH`/compiler/build-environment changes. Reuse `-C` for every
-   other relaunch with the same architecture, compiler, and build
-   environment. After changing those, use a separate config file within the
-   same investigation directory to get a fresh workspace. Keep artifacts out
-   of source commits; do not delete unrelated build state.
+5. Reuse `-C` for relaunches with the same architecture, compiler and build
+   environment. After changing those, use a separate config within the same
+   investigation directory with a fresh workspace and build output. Keep
+   artifacts out of source commits; do not delete unrelated build state.
 
 Compare every failure with the reported signature before investigating it.
 A failure in a different phase or with a different message (test-suite

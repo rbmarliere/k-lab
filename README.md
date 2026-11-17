@@ -69,13 +69,19 @@ Install the build tools and vng dependencies yourself; see the
 
 ## Tests
 
-Write a separate test under `tests/` for each task. Keep its ktest config,
-fragments, and reproducer files together. Keep run settings in that file and
-its includes: architecture, disk and rootfs paths, toolchain, resources,
-target selection and iteration counts. Use separate config files for variants.
-Do not use shell environment assignments to configure a launch.
+A test consists of a ktest configuration and any supporting fragments and
+reproducer scripts. A typical layout is `tests/my-test/test`, with supporting
+files alongside it. Several related configurations can share one directory.
 
-Always declare `ARCH` before the first `INCLUDE`, including native builds.
+Keeping architecture, image and rootfs paths, toolchain, resources and test
+settings in the configuration makes runs repeatable. Advanced command-line
+overrides are also available; see [Run](#run).
+
+Declare `ARCH := ...` before the first `INCLUDE`, including native builds.
+`kt` supplies `THIS_DIR`, the path to the k-lab checkout; use `${THIS_DIR}`
+for references to its includes and test files. `ROOT_DISK`, `CHROOT_KERNEL`
+and `CROSS_COMPILE` use normal `=` options.
+
 For example, `tests/my-test/test`:
 
 ```conf
@@ -91,14 +97,23 @@ TEST_TYPE = test
 TEST = ${SSH} sh ./run.sh
 ```
 
-Put verdict logic in `run.sh` and return a meaningful exit status. For a
-build-only check, use `TEST_TYPE = build`; no image or guest script is needed.
-Extend phase hooks with their corresponding `*_APPEND` options.
+Here, `POST_BUILD_APPEND` copies `run.sh` into the build output, which is
+available in the guest as `/mnt/build`. The SSH test command runs from that
+directory. The script's exit status supplies the result: zero for success,
+nonzero for failure. Keeping reproducer logic in a script separates it from
+the build and VM configuration.
 
-Include `include/suse.conf` after defaults for SUSE product configuration. Set
-`SUSE_BRANCH = stable` or the relevant config-tree directory. `SUSE_FLAVOR`
-selects the config filename and defaults to `default`. Leave `SUSE_VERSION` and
-`SUSE_PATCHLEVEL` unset for Tumbleweed, or set both for SLE.
+For a build-only check, use `TEST_TYPE = build`; no image or guest script is
+needed. Phase hooks have corresponding `*_APPEND` options for adding commands
+without replacing the existing hook.
+
+`include/suse.conf` provides SUSE product configuration. `SUSE_BRANCH` selects
+the configuration-tree directory (`stable` for Tumbleweed), and `SUSE_FLAVOR`
+selects the config filename, defaulting to `default`. `SUSE_VERSION` and
+`SUSE_PATCHLEVEL` are unset for Tumbleweed and set together for SLE.
+
+These settings can be bundled with toolchain and path options in a
+[build profile](#workspaces-and-build-reuse).
 
 The SUSE include supplies the flavor through `ADD_CONFIG`. To add test-specific
 fragments without replacing it, retain the inherited list after `TEST_START`:
@@ -114,18 +129,47 @@ self-reference retains it only in a test section; do not use it to redefine
 `ADD_CONFIG` in `DEFAULTS OVERRIDE`. Later fragments override earlier ones;
 `MIN_CONFIG` takes precedence over all `ADD_CONFIG` fragments.
 
+A configuration can contain several cases selected with ktest conditionals.
+With common includes and settings above the sections, this example selects
+between two script modes through the `TEST := ...` assignment:
+
+```conf
+DEFAULTS IF NOT DEFINED TEST
+TEST := baseline
+
+TEST_START IF ${TEST} == baseline
+TEST_TYPE = test
+TEST = ${SSH} sh ./run.sh baseline
+
+TEST_START IF ${TEST} == stress
+TEST_TYPE = test
+TEST = ${SSH} sh ./run.sh stress
+```
+
+Edit the selector before starting a run. Conditional cases in one config
+share a workspace; separate config files get independent workspaces, even
+when they live in the same directory. This is useful for different build
+environments or concurrent runs; see
+[Workspaces and build reuse](#workspaces-and-build-reuse).
+
 For full syntax, see ktest's [sample.conf](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/tools/testing/ktest/sample.conf) and
 [examples](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/tools/testing/ktest/examples/README).
 
 ## Run
 
-Run from the kernel worktree, selecting your task's test:
+Run from the kernel worktree, selecting a test configuration:
 
 ```bash
 kt -n my-test    # resolved options only
 kt my-test       # build and run the configured test
 kt -C my-test    # rebuild without cleaning
 ```
+
+By default, each run cleans the kernel build with `make mrproper`, even if
+the source has not changed. `-C`, or `BUILD_NOCLEAN = 1` in the config or
+profile, skips that cleaning step and reuses build objects. A fresh build
+output is needed after changing the toolchain or build environment, since
+make may otherwise reuse incompatible tools and objects.
 
 `compile_commands.json` is generated in `OUTPUT_DIR` by default and linked
 from the kernel source directory (`BUILD_DIR`). The latest build selects the
@@ -163,6 +207,8 @@ current run never reached that phase. While running, `status` returns 0; `wait`
 returns 124 on timeout, without stopping the run. Runs interrupted before
 cleanup (for example, SIGKILL) have no completed exit status.
 
+### Architecture and toolchains
+
 Set `ARCH := ...` before the first `INCLUDE` in each test config. Supported
 kernel architecture names are `x86_64`, `arm64`, `arm`, `powerpc`, `s390`, and
 `riscv`. Disk names and chroot contents do not select it. `CROSS_COMPILE`
@@ -190,28 +236,32 @@ chroot when using chroot builds.
 parallelism or additional targets. It does not apply to configuration or other
 make invocations and is not exported to hooks.
 
+### Workspaces and build reuse
+
 `kt` manages `TMP_DIR`, choosing `tmp/<worktree>-<config>` under the k-lab
-checkout and protecting it with `flock`. Do not set `TMP_DIR` in the test
-config; `kt -n` shows the resolved path. Concurrent runs need separate config
-files, workspaces, output directories and `VNG_PORT` values. The default SSH
-port is 22000; there is no automatic port allocation.
+checkout and protecting it with `flock`. This path is managed by the runner,
+not by the test configuration; `kt -n` shows the resolved value. The workspace
+follows the config path, not its `TEST` selector, so conditional variants in
+one config share it.
+Concurrent runs need separate config files, workspaces, output directories
+and `VNG_PORT` values. The default SSH port is 22000; there is no automatic
+port allocation.
 
 Tests can share a kernel build by setting the same `OUTPUT_DIR`, while each
 keeps its own `TMP_DIR` for logs and status. `kt` also locks `OUTPUT_DIR`, so
-only one run uses a build at a time. Keep the shared settings in a build
-profile under `profiles/`, named after what it builds. Profiles are local,
-like most tests; `profiles/Tumbleweed-x86_64.conf` is the tracked example.
+only one run uses a build at a time.
 
-- Everything that affects the kernel build (branch, version, config
-  fragments, toolchain) belongs in the profile. Tests that differ here
-  rebuild each other's objects.
-- `BUILD_NOCLEAN = 1` keeps runs from wiping the build. Delete `OUTPUT_DIR`
-  to force a clean build; do so after changing the toolchain, since stale
-  tools are not rebuilt.
-- Build one source tree per `OUTPUT_DIR`.
+Profiles under `profiles/` are reusable configuration includes that can bundle
+product, toolchain, path and build-output settings. Profiles are local, like
+most tests; `profiles/Tumbleweed-x86_64.conf` is the tracked example.
 
-A test includes the profile after `defaults.conf` and sets only its own
-resources and guest script:
+Sharing an output directory also shares build state. Configuration changes
+can trigger rebuilds; switching toolchains or source trees can leave stale
+artifacts. Separate output directories keep different builds independent.
+`BUILD_NOCLEAN = 1` skips kernel cleaning; a fresh `OUTPUT_DIR` starts a new
+kernel build.
+
+This example uses a profile for build settings and adds a guest script:
 
 ```conf
 ARCH := x86_64
@@ -225,6 +275,22 @@ TEST_START
 TEST_TYPE = test
 TEST = ${SSH} sh ./run.sh
 ```
+
+### Timeouts
+
+ktest's `RUN_TIMEOUT` limits commands it runs, including kernel cleaning and
+building, not just the final test command. A timeout sized only for a short
+guest test can therefore abort a from-scratch build. Leave it unset for no
+command timeout, or allow for the build when setting it.
+
+A guest command can have its own limit without restricting the build:
+
+```conf
+TEST = ${SSH} timeout 300 sh ./run.sh
+```
+
+`kt wait -t <seconds>` only limits how long the wait command waits. It does
+not stop a running build or test.
 
 ## Logs and artifacts
 
@@ -245,7 +311,7 @@ earlier run if the current run never reached their phase.
 
 VM launches also record `cmdline-vng` and `cmdline-qemu`, described below.
 
-## VM policy
+## VM behavior
 
 Boots require `ROOT_DISK`, a raw or qcow2 image. vng handles the boot
 parameters and module exposure. The minimum kernel fragment comes from `vng
@@ -268,9 +334,8 @@ other image layouts; enable the chosen filesystem in the kernel config.
 `VNG_MEM` defaults to `1G`; `VNG_ARGS` forwards other vng flags, such as
 `--cpus 4 --systemd`.
 
-Ctrl-C stops the run and its VM. For interactive SSH, use the run's
-`TMP_DIR/ssh` helper, which already contains the workspace and port. Do not
-assemble another command with separate configuration values.
+Ctrl-C stops the run and its VM. For interactive SSH, the run's
+`TMP_DIR/ssh` helper is already configured with its workspace and port.
 
 Each VM launch records the shell-quoted vng invocation in `TMP_DIR/cmdline-vng`
 and a QEMU command preview in `TMP_DIR/cmdline-qemu`. Both include the
@@ -339,8 +404,9 @@ SELFTEST_TARGETS = mm net
 ```
 
 Keep that checkout at the revision you want; k-lab does not fetch or update it.
-The source path and Git revision are logged before building headers. Use a
-separate test config when changing source trees so intermediates are not shared.
+The source path and Git revision are logged before building headers.
+Selftest intermediates are workspace-local; separate config files keep
+different source trees from sharing them.
 
 Headers from `SELFTEST_SOURCE` are generated into `TMP_DIR/selftests/headers`,
 then the selected collections build with userspace intermediates in
@@ -413,18 +479,18 @@ Subset mode skips the top-level installation; run selected tests directly.
 Existing installed files are not removed. Unknown directories and build
 failures stop the run; there is no full-build fallback.
 
-Use a separate config file to get a fresh workspace after changing
-architecture, build root, toolchain or compiler flags. If `LTP_BUILD_DIR` is
-explicitly set, use a fresh directory too. After installing or updating build
-dependencies, remove `LTP_BUILD_DIR/config.cache` before the next build so
-configure refreshes its probe results.
+Changes to architecture, build root, toolchain or compiler flags need fresh
+LTP build state. A separate config file provides a new default workspace and
+LTP build directory. If `LTP_BUILD_DIR` is explicitly set, use a fresh directory
+too. After installing or updating build dependencies, remove
+`LTP_BUILD_DIR/config.cache` before the next build so configure refreshes its
+probe results.
 
 ## Sample
 
 `tests/tumbleweed` demonstrates build, boot, chroot, BPF and LTP modes with
-Tumbleweed x86_64 image/rootfs paths. It is a sample, not the entrypoint for
-unrelated work; create task-specific tests instead. Select a sample mode by
-editing its existing `TEST := build` assignment, for example:
+Tumbleweed x86_64 image/rootfs paths. Select a sample mode by editing its
+existing `TEST := build` assignment, for example:
 
 ```conf
 TEST := ltp
