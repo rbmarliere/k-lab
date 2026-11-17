@@ -195,7 +195,7 @@ kt wait my-test
 ```
 
 `status` reports immediately; `wait` waits up to 300 seconds by default (`-t`
-changes this). Both resolve `[test]` exactly like a run. Run them from the
+changes this). Both resolve `<test>` exactly like a run. Run them from the
 same kernel worktree with the same config file used for launch. Keep that
 config unchanged until the run finishes.
 
@@ -350,7 +350,7 @@ actual launch.
 `kt -n <test>` prints configured RAM, CPUs (`VNG_ARGS`), disk, architecture,
 and snapshot settings without launching a VM.
 
-`kt kill [test]` requests graceful cancellation of the whole run. Like
+`kt kill <test>` requests graceful cancellation of the whole run. Like
 `status` and `wait`, run it from the same kernel worktree with the same test
 config used for launch.
 

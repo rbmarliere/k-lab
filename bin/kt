@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 set -e
 
+usage() {
+	echo 'usage: kt [-b] [-C] [-D name=value] [-n] [-y] <test>'
+	echo '       kt <wait|status> [-t seconds] <test>'
+	echo '       kt kill <test>'
+}
+
+(($#)) || {
+	usage
+	exit 0
+}
+
 dir=$(dirname -- "$(dirname -- "$(realpath -- "$0")")")
 action=run
 if [[ ${1-} == wait || ${1-} == status || ${1-} == kill ]]; then
@@ -26,12 +37,7 @@ while getopts ':bCD:hnyt:' opt; do
 	t) timeout=$OPTARG ;;
 	n) dry_run=1 ;;
 	y) noninteractive=1 ;;
-	h)
-		echo 'usage: kt [-b] [-C] [-D name=value] [-n] [-y] [test]'
-		echo '       kt <wait|status> [-t seconds] [test]'
-		echo '       kt kill [test]'
-		exit 0
-		;;
+	h) usage; exit 0 ;;
 	*)
 		echo 'invalid option; use kt -h' >&2
 		exit 2
@@ -39,8 +45,9 @@ while getopts ':bCD:hnyt:' opt; do
 	esac
 done
 shift $((OPTIND - 1))
-[[ $# -le 1 ]] || {
+[[ $# -eq 1 ]] || {
 	echo 'expected one test config' >&2
+	usage >&2
 	exit 2
 }
 [[ $timeout =~ ^[0-9]+$ ]] || {
@@ -53,7 +60,7 @@ if [[ $action != run && ( $background == 1 || $dry_run == 1 ) ]] ||
 	exit 2
 fi
 
-file=${1:-$dir/include/defaults.conf}
+file=$1
 if [[ ! -e $file ]]; then
 	file=$dir/tests/$file
 fi
@@ -154,9 +161,7 @@ flock -n 8 || {
 	echo "build in use: $output" >&2
 	exit 1
 }
-if (($#)); then
-	ln -sfnT -- "$(dirname -- "$file")" "$state/test"
-fi
+ln -sfnT -- "$(dirname -- "$file")" "$state/test"
 printf 'status=running\n' >"$state/status"
 run() {
 	link=$PWD/ssh-${state##*/}
