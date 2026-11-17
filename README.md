@@ -317,20 +317,24 @@ Boots require `ROOT_DISK`, a raw or qcow2 image. vng handles the boot
 parameters and module exposure. The minimum kernel fragment comes from `vng
 --kconfig --dry-run`.
 
-The guest root is writable, but QEMU's `-snapshot` discards disk changes when
-the VM stops. No persistent disk overlays are managed by k-lab. Set
-`VNG_QEMU_OPTS =` to disable snapshots and modify the base images directly.
-This also affects extra disks; do not share images between writable guests
-without snapshots.
+The guest root is writable. `VNG_SNAPSHOT` defaults to `1`, passing QEMU's
+`-snapshot` so disk changes are discarded when the VM stops. Set
+`VNG_SNAPSHOT = 0` to modify the base images directly. This also affects extra
+disks; do not share images between writable guests without snapshots.
+
+`VNG_QEMU_OPTS` supplies additional QEMU options and defaults to empty,
+independently of the snapshot setting. No persistent disk overlays are
+managed by k-lab.
 
 Guest paths:
 
 - `/mnt/src`: kernel source, read-only
 - `/mnt/build`: build output, writable; also the SSH working directory
 
-Only files written to exported output directories survive a VM stop. Set
-`VNG_ROOT_DEV` (default `/dev/vda`) and `VNG_ROOT_FSTYPE` (default `ext4`) for
-other image layouts; enable the chosen filesystem in the kernel config.
+With snapshots enabled, only files written to exported output directories
+survive a VM stop. For other image layouts, set `VNG_ROOT_DEV` (default
+`/dev/vda`) and `VNG_ROOT_FSTYPE` (default `ext4`), and enable the chosen
+filesystem in the kernel config.
 `VNG_MEM` defaults to `1G`; `VNG_ARGS` forwards other vng flags, such as
 `--cpus 4 --systemd`.
 

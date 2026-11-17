@@ -7,6 +7,13 @@ disk=${2:?usage: vng <kernel> <root-disk> [vng-args...]}
 shift 2
 arch=${ARCH:-$(uname -m)}
 
+qemu_opts=${VNG_QEMU_OPTS-}
+case ${VNG_SNAPSHOT:-1} in
+1) qemu_opts="-snapshot${qemu_opts:+ $qemu_opts}" ;;
+0) ;;
+*) echo 'VNG_SNAPSHOT must be 0 or 1' >&2; exit 2 ;;
+esac
+
 args=("${VNG:-$bin/../tools/virtme-ng/vng}" --run "$kernel" \
 	--root-disk "$disk" \
 	--root-dev "${VNG_ROOT_DEV:-/dev/vda}" \
@@ -14,7 +21,7 @@ args=("${VNG:-$bin/../tools/virtme-ng/vng}" --run "$kernel" \
 	--arch "$("$bin/cross" vng-arch "$arch")" \
 	--busybox "${BUSYBOX:-$("$bin/cross" busybox-path "$arch")}" \
 	--user root --verbose --network user --force-9p \
-	--rw --qemu-opts="${VNG_QEMU_OPTS--snapshot}" "$@")
+	--rw --qemu-opts="$qemu_opts" "$@")
 if [[ -n ${TMP_DIR-} ]]; then
 	mkdir -p -- "$TMP_DIR"
 	printf '%q ' "${args[@]}" >"$TMP_DIR/cmdline-vng"
