@@ -60,6 +60,12 @@ if [[ $action != run && ( $background == 1 || $dry_run == 1 ) ]] ||
 	exit 2
 fi
 
+if ! IFS= read -r credits 2>/dev/null <CREDITS ||
+   [[ $credits != $'\tThis is at least a partial credits-file of people that have' ]]; then
+	echo 'run from a Linux kernel worktree' >&2
+	exit 1
+fi
+
 file=$1
 if [[ ! -e $file ]]; then
 	file=$dir/tests/$file
