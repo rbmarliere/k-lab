@@ -65,19 +65,34 @@ Keep all run configuration in the test file and its includes: architecture,
 disk and rootfs paths, toolchain, resources, target selection and iteration
 counts. Never use `kt -D` or shell-prefix environment assignments to supply
 test settings at launch. The command line selects the config and controls
-execution (`-n`, `-b`, `-C`, `-y`, and wait `-t`). Use separate config files
-for variants rather than command-line overrides.
+execution (`-n`, `-b`, `-C`, `-y`, and wait `-t`).
 
 Throughout this skill, `kt` means the resolved absolute path to `bin/kt`.
 Run it directly from the kernel worktree root; do not source `k-lab.sh` or
-assume `kt` is on PATH. Create a task-specific `tests/<name>/` with a
-`test` config, fragments, and reproducer files unless the user selects an
-existing test to reuse. Keep verdict logic in a standalone script: exit 0 for
-expected behavior, nonzero for a violated assertion, and distinguish setup
-errors from the defect. Keep the output of setup and preceding steps (in the
-test log or under `/mnt/build`) rather than discarding it, and record the
-relevant system state immediately before the assertion when the defect may
-depend on resources.
+assume `kt` is on PATH.
+
+Start each new investigation in its own `tests/<name>/` with a `test` config,
+fragments, and reproducer files unless the user selects an existing test.
+Do not search existing tests for reuse candidates unless asked.
+Once the investigation has a directory established by the conversation, user,
+handoff or delegation, keep related follow-up experiments there. A new
+hypothesis, kernel version, execution backend or subagent does not by itself
+justify a sibling directory. Pass the established directory when delegating
+follow-up work.
+
+Prefer `TEST_START IF ${TEST} == <variant>` sections in the existing config
+for related sequential variants with a compatible build environment. Keep an
+explicit `TEST := <variant>` selector in the config. Use separate config files
+within the same investigation directory when independent workspaces, build
+environments, concurrency or readability warrant them. Share scripts and
+fragments where appropriate; separate assertions may use separate scripts
+without creating another investigation directory.
+
+Keep verdict logic in a standalone script: exit 0 for expected behavior,
+nonzero for a violated assertion, and distinguish setup errors from the defect.
+Keep the output of setup and preceding steps (in the test log or under
+`/mnt/build`) rather than discarding it, and record the relevant system state
+immediately before the assertion when the defect may depend on resources.
 
 Minimal boot-test config (replace `example` and the image path):
 
@@ -121,8 +136,10 @@ userspace.
   the host.
 - Extend phases with `*_APPEND`; replace a whole hook only deliberately.
 - `kt` manages `TMP_DIR`; do not set it in the config. `kt -n` shows its path.
-  Concurrent runs need distinct workspaces, output directories and, for VMs,
-  `VNG_PORT` values. There is no automatic port allocation.
+  Conditional variants in one config share that workspace; the selector does
+  not isolate runs. Concurrent runs need distinct workspaces, output
+  directories and, for VMs, `VNG_PORT` values. There is no automatic port
+  allocation.
 - Reuse a kernel build by including its profile from `profiles/` (for
   example `profiles/Tumbleweed-x86_64.conf`) after defaults.conf. If none
   matches, add one (README, "Run"). Keep build-affecting settings in the
@@ -168,9 +185,9 @@ userspace.
    even for an unmodified tree; use it only for the first build of a test or
    after `ARCH`/compiler/build-environment changes. Reuse `-C` for every
    other relaunch with the same architecture, compiler, and build
-   environment. After changing those, use a separate config file to get a
-   fresh workspace. Keep artifacts out of source commits; do not delete
-   unrelated build state.
+   environment. After changing those, use a separate config file within the
+   same investigation directory to get a fresh workspace. Keep artifacts out
+   of source commits; do not delete unrelated build state.
 
 Compare every failure with the reported signature before investigating it.
 A failure in a different phase or with a different message (test-suite
