@@ -75,6 +75,8 @@ assume `kt` is on PATH.
 
 Start each new investigation in its own `tests/<name>/` with a `test` config,
 fragments, and reproducer files unless the user selects an existing test.
+Use kebab-case for test directory names: lowercase words separated by hyphens,
+not underscores (e.g. `tests/foo-bar`).
 Do not search existing tests for reuse candidates unless asked.
 Once the investigation has a directory established by the conversation, user,
 handoff or delegation, keep related follow-up experiments there. A new
