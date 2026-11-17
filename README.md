@@ -494,22 +494,32 @@ probe results.
 
 ## Sample
 
-`tests/tumbleweed` demonstrates build, boot, chroot, BPF and LTP modes with
-Tumbleweed x86_64 image/rootfs paths. Select a sample mode by editing its
-existing `TEST := build` assignment, for example:
+[The Tumbleweed sample](tests/tumbleweed/test) includes the [x86_64
+profile](profiles/Tumbleweed-x86_64.conf), which selects the SUSE `stable`
+config and sets `ROOT_DISK` to `/roots/Tumbleweed/x86_64.img`. Set
+`SUSE_KERNEL_SOURCE_GIT` in `setup.conf` to the tree containing
+`stable/config/x86_64/default`. Only modes that boot a VM need the disk image.
 
-```conf
-TEST := ltp
-```
-
-Set the disk, rootfs and other settings in the file, then run:
+From the kernel worktree:
 
 ```bash
-kt -n tumbleweed
-kt tumbleweed
+kt tumbleweed                      # build on the host; no VM
+kt -n -D TEST:=boot tumbleweed     # inspect the boot settings
+kt -D TEST:=boot tumbleweed        # build, boot and check /dev/vda
+kt -D TEST:=manual tumbleweed      # boot and keep the VM running
 ```
 
-`manual` keeps the VM running for interactive SSH access; Ctrl-C ends the run.
+Use `-D TEST:=<mode>` for one run, or edit `TEST := build` in the test file to
+change the default. In `manual` mode, connect from another terminal with the
+run's `TMP_DIR/ssh` helper. Ctrl-C stops the run.
+
+The test file sets the chroot paths per mode. `chroot` and `chroot-boot` build
+the kernel in `/roots/Tumbleweed/x86_64`; `ltp` uses that rootfs to build LTP,
+not the kernel. `bpf` runs the `bpf:test_progs` selftest.
+
+All modes share `tmp/build-Tumbleweed-x86_64` and skip cleaning by default.
+See [build reuse](#workspaces-and-build-reuse) before switching build
+environments.
 
 ## Agent skill
 

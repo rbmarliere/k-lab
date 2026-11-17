@@ -1,5 +1,6 @@
 ARCH := x86_64
 INCLUDE ${THIS_DIR}/include/defaults.conf
+INCLUDE ${THIS_DIR}/profiles/Tumbleweed-x86_64.conf
 
 DEFAULTS IF NOT DEFINED TEST
 TEST := build
@@ -9,9 +10,6 @@ INCLUDE ${THIS_DIR}/include/selftests.conf
 
 DEFAULTS IF ${TEST} == ltp
 INCLUDE ${THIS_DIR}/include/ltp.conf
-
-DEFAULTS OVERRIDE
-ROOT_DISK = /roots/suse/Tumbleweed/x86_64.img
 
 TEST_START IF ${TEST} == build
 TEST_TYPE = build
@@ -27,16 +25,16 @@ TEST = ${SSH} sleep infinity
 
 TEST_START IF ${TEST} == chroot
 TEST_TYPE = build
-CHROOT_KERNEL = /roots/suse/Tumbleweed/x86_64
+CHROOT_KERNEL = /roots/Tumbleweed/x86_64
 
 TEST_START IF ${TEST} == chroot-boot
 TEST_TYPE = test
-CHROOT_KERNEL = /roots/suse/Tumbleweed/x86_64
+CHROOT_KERNEL = /roots/Tumbleweed/x86_64
 TEST = ${SSH} test -b /dev/vda
 
 TEST_START IF ${TEST} == ltp
 TEST_TYPE = test
-CHROOT_USER = /roots/suse/Tumbleweed/x86_64
+CHROOT_USER = /roots/Tumbleweed/x86_64
 LTP_TARGETS = testcases/kernel/syscalls/getpid
 POST_BUILD_APPEND = ${BUILD_LTP}
 TEST = ${SSH} env LTPROOT=/mnt/build/ltp /mnt/build/ltp/testcases/bin/getpid01
@@ -44,8 +42,7 @@ TEST = ${SSH} env LTPROOT=/mnt/build/ltp /mnt/build/ltp/testcases/bin/getpid01
 TEST_START IF ${TEST} == bpf
 TEST_TYPE = test
 TEST_DIR = /mnt/build/kselftest/kselftest_install/bpf
-TEST_BIN = ./test_progs -vv -t btf
-TEST = ${SSH} sh -c 'mount bpffs /sys/fs/bpf -t bpf && cd ${TEST_DIR} && ${TEST_BIN}'
+TEST = ${SSH} sh -c 'mount bpffs /sys/fs/bpf -t bpf && cd ${TEST_DIR} && ./test_progs'
 SELFTEST_TARGETS = bpf
 POST_BUILD_APPEND = ${BUILD_SELFTESTS}
-ADD_CONFIG = ${BUILD_DIR}/tools/testing/selftests/bpf/config ${BUILD_DIR}/tools/testing/selftests/bpf/config.${KLAB_ARCH}
+ADD_CONFIG = ${ADD_CONFIG} ${BUILD_DIR}/tools/testing/selftests/bpf/config ${BUILD_DIR}/tools/testing/selftests/bpf/config.${KLAB_ARCH}
