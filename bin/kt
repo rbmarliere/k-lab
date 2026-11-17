@@ -79,7 +79,7 @@ file=$(realpath -- "$file")
 tree=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 name=${file#"$dir/"}
 name=${name#tests/}
-name=$(printf '%s' "${tree##*/}-$name" | tr -c 'A-Za-z0-9_.-' '_')
+name=$(printf '%s' "${tree##*/}-$name" | tr -c 'A-Za-z0-9_.-' '-')
 state=$dir/tmp/$name
 state=$(realpath -m -- "$state")
 args=(-D "MACHINE=${state##*/}" "${args[@]}" -D "THIS_DIR:=$dir" -D "TMP_DIR=$state")
