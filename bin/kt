@@ -82,7 +82,7 @@ name=${name#tests/}
 name=$(printf '%s' "${tree##*/}-$name" | tr -c 'A-Za-z0-9_.-' '-')
 state=$dir/tmp/$name
 state=$(realpath -m -- "$state")
-args=(-D "MACHINE=${state##*/}" "${args[@]}" -D "THIS_DIR:=$dir" -D "TMP_DIR=$state")
+args=(-D "MACHINE=${state##*/}" "${args[@]}" -D "KLAB_DIR:=$dir" -D "TMP_DIR=$state")
 
 summary() {
 	printf 'Workspace: %s\n' "$state"

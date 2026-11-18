@@ -36,7 +36,7 @@ kernel revision into it.
 ## Setup
 
 Optionally edit `setup.conf`: `SUSE_KERNEL_SOURCE_GIT` supplies SUSE configs,
-and `LTP_GIT` supplies LTP. `kt` determines its checkout path (`THIS_DIR`)
+and `LTP_GIT` supplies LTP. `kt` determines its checkout path (`KLAB_DIR`)
 automatically. Then:
 
 ```bash
@@ -78,7 +78,7 @@ settings in the configuration makes runs repeatable. Advanced command-line
 overrides are also available; see [Run](#run).
 
 Declare `ARCH := ...` before the first `INCLUDE`, including native builds.
-`kt` supplies `THIS_DIR`, the path to the k-lab checkout; use `${THIS_DIR}`
+`kt` supplies `KLAB_DIR`, the path to the k-lab checkout; use `${KLAB_DIR}`
 for references to its includes and test files. `ROOT_DISK`, `CHROOT_KERNEL`
 and `CROSS_COMPILE` use normal `=` options.
 
@@ -86,11 +86,11 @@ For example, `tests/my-test/test`:
 
 ```conf
 ARCH := x86_64
-INCLUDE ${THIS_DIR}/include/defaults.conf
+INCLUDE ${KLAB_DIR}/include/defaults.conf
 
 DEFAULTS OVERRIDE
 ROOT_DISK = /path/to/x86_64.img
-POST_BUILD_APPEND = cp ${THIS_DIR}/tests/my-test/run.sh ${OUTPUT_DIR}/run.sh
+POST_BUILD_APPEND = cp ${KLAB_DIR}/tests/my-test/run.sh ${OUTPUT_DIR}/run.sh
 
 TEST_START
 TEST_TYPE = test
@@ -121,7 +121,7 @@ fragments without replacing it, retain the inherited list after `TEST_START`:
 ```conf
 TEST_START
 TEST_TYPE = build
-ADD_CONFIG = ${ADD_CONFIG} ${THIS_DIR}/tests/my-test/extra.config
+ADD_CONFIG = ${ADD_CONFIG} ${KLAB_DIR}/tests/my-test/extra.config
 ```
 
 A plain per-test `ADD_CONFIG = ...` replaces the flavor fragment. This
@@ -224,7 +224,7 @@ Use ktest's `MAKE_CMD` for other persistent make settings:
 
 ```conf
 DEFAULTS OVERRIDE
-MAKE_CMD = ${RUN} ${THIS_DIR}/bin/make LLVM=1 LD=ld.lld KCFLAGS="-O1 -g"
+MAKE_CMD = ${RUN} ${KLAB_DIR}/bin/make LLVM=1 LD=ld.lld KCFLAGS="-O1 -g"
 ```
 
 Kernel make hooks should also invoke `${MAKE_CMD}` to use the same settings and
@@ -265,11 +265,11 @@ This example uses a profile for build settings and adds a guest script:
 
 ```conf
 ARCH := x86_64
-INCLUDE ${THIS_DIR}/include/defaults.conf
-INCLUDE ${THIS_DIR}/profiles/Tumbleweed-x86_64.conf
+INCLUDE ${KLAB_DIR}/include/defaults.conf
+INCLUDE ${KLAB_DIR}/profiles/Tumbleweed-x86_64.conf
 
 DEFAULTS OVERRIDE
-POST_BUILD_APPEND = cp ${THIS_DIR}/tests/my-test/run.sh ${OUTPUT_DIR}/run.sh
+POST_BUILD_APPEND = cp ${KLAB_DIR}/tests/my-test/run.sh ${OUTPUT_DIR}/run.sh
 
 TEST_START
 TEST_TYPE = test
@@ -375,7 +375,7 @@ build on the host:
 ```conf
 DEFAULTS OVERRIDE
 CHROOT_USER = /path/to/guest/rootfs
-POST_BUILD_APPEND = cp ${THIS_DIR}/tests/my-test/repro.c ${OUTPUT_DIR}/ && ${RUN_USER} gcc -o ${OUTPUT_DIR}/repro ${OUTPUT_DIR}/repro.c
+POST_BUILD_APPEND = cp ${KLAB_DIR}/tests/my-test/repro.c ${OUTPUT_DIR}/ && ${RUN_USER} gcc -o ${OUTPUT_DIR}/repro ${OUTPUT_DIR}/repro.c
 ```
 
 Kernel builds use `CHROOT_KERNEL`. Complete selftest collections, including
@@ -444,8 +444,8 @@ Include `include/ltp.conf` and add `${BUILD_LTP}` to `POST_BUILD_APPEND`:
 
 ```conf
 ARCH := arm64
-INCLUDE ${THIS_DIR}/include/defaults.conf
-INCLUDE ${THIS_DIR}/include/ltp.conf
+INCLUDE ${KLAB_DIR}/include/defaults.conf
+INCLUDE ${KLAB_DIR}/include/ltp.conf
 
 DEFAULTS OVERRIDE
 ROOT_DISK = /path/to/aarch64.img

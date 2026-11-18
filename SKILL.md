@@ -101,7 +101,7 @@ immediately before the assertion when the defect may depend on resources.
 Use the README's configuration examples and build helpers. Apply these
 workflow safeguards:
 
-- Write every INCLUDE path as `${THIS_DIR}/...`, never relative.
+- Write every INCLUDE path as `${KLAB_DIR}/...`, never relative.
 - Choose the architecture, disk, build roots and toolchain explicitly. Do not
   infer a build root or compiler from an image filename, or assume a rootfs
   has the guest's libraries and build dependencies.

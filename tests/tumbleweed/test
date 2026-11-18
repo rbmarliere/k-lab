@@ -1,15 +1,15 @@
 ARCH := x86_64
-INCLUDE ${THIS_DIR}/include/defaults.conf
-INCLUDE ${THIS_DIR}/profiles/Tumbleweed-x86_64.conf
+INCLUDE ${KLAB_DIR}/include/defaults.conf
+INCLUDE ${KLAB_DIR}/profiles/Tumbleweed-x86_64.conf
 
 DEFAULTS IF NOT DEFINED TEST
 TEST := build
 
 DEFAULTS IF ${TEST} == bpf
-INCLUDE ${THIS_DIR}/include/selftests.conf
+INCLUDE ${KLAB_DIR}/include/selftests.conf
 
 DEFAULTS IF ${TEST} == ltp
-INCLUDE ${THIS_DIR}/include/ltp.conf
+INCLUDE ${KLAB_DIR}/include/ltp.conf
 
 TEST_START IF ${TEST} == build
 TEST_TYPE = build
