@@ -385,10 +385,24 @@ then builds incrementally. Autoconf saves probe results in
 runs all probes.
 
 Set `CHROOT_USER` to a rootfs matching the guest; an empty value builds on the
-host. Kernel compiler settings do not apply. `LTP_CONFIGURE_OPTIONS` passes
-configure arguments, including explicit `--host` and `CC=...` for cross-builds.
-These options follow the defaults; add `--cache-file=/dev/null` to disable
-caching. `LTP_BUILD_OPTIONS` passes make arguments.
+host. Kernel compiler settings do not apply to LTP userspace.
+`LTP_CONFIGURE_OPTIONS` passes configure arguments, including explicit `--host`
+and `CC=...` for cross-builds. These options follow the defaults; add
+`--cache-file=/dev/null` to disable caching. `LTP_BUILD_OPTIONS` passes make
+arguments.
+
+Kernel modules use `OUTPUT_DIR` and its generated kernel release, not the
+host's running kernel. They build in `CHROOT_USER` with the target `ARCH` (and
+`CROSS_COMPILE` for host builds). The compiler there must support the tested
+kernel's build requirements. Separate module output requires Kbuild's
+`KBUILD_EXTMOD_OUTPUT` support; otherwise configuration stops with an error.
+Set `LTP_CONFIGURE_OPTIONS = --without-modules` to build userspace only.
+Modules are disabled automatically when the tested kernel lacks
+`CONFIG_MODULES=y`.
+
+Each run discards generated `.ko` files and `.dep_modules` stamps from the LTP
+build and install directories, so modules cannot survive a kernel change or a
+failed rebuild. Userspace remains incremental.
 
 `LTP_TARGETS` selects source-relative directories to build and install. Empty
 means the full tree. Subset builds prepare the common LTP library first; other
@@ -400,8 +414,9 @@ LTP_TARGETS = testcases/lib testcases/network/nfs/nfs_stress testcases/kernel/fs
 ```
 
 Subset mode skips the top-level installation; run selected tests directly.
-Existing installed files are not removed. Unknown directories and build
-failures stop the run; there is no full-build fallback.
+Existing installed userspace files are not removed; only modules built by the
+selected targets are retained. Unknown directories and build failures stop the
+run; there is no full-build fallback.
 
 Changing `LTP_SOURCE` does not change the build or install directories. For a
 clean comparison between worktrees, use a fresh `LTP_BUILD_DIR` and start with

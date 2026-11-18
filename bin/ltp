@@ -4,6 +4,16 @@ set -e
 
 src=$(realpath -e -- "${LTP_SOURCE:?set LTP_SOURCE to an LTP source tree}")
 out=$(realpath -m -- "${LTP_BUILD_DIR:?LTP_BUILD_DIR is required}")
+BUILD_DIR=$(realpath -e -- "${BUILD_DIR:?BUILD_DIR is required}")
+OUTPUT_DIR=$(realpath -e -- "${OUTPUT_DIR:?OUTPUT_DIR is required}")
+export BUILD_DIR OUTPUT_DIR
+release=$(< "$OUTPUT_DIR/include/config/kernel.release")
+for dir in "$src" "$BUILD_DIR" "$OUTPUT_DIR"; do
+	if [[ $out == / || $dir == "$out" || $dir == "$out/"* ]]; then
+		echo 'ltp: LTP_BUILD_DIR must not contain the LTP source or kernel trees' >&2
+		exit 1
+	fi
+done
 if [[ -e $src/include/mk/config.mk ]]; then
 	echo "ltp: $src is configured in-tree; run 'make distclean' there" >&2
 	exit 1
@@ -24,8 +34,11 @@ for i in "${!targets[@]}"; do
 	targets[i]=${dir#"$src/"}
 done
 
-# Kernel compiler settings do not apply to LTP; use LTP_CONFIGURE_OPTIONS.
-unset ARCH CC HOSTCC HOSTCFLAGS CROSS_COMPILE
+# Keep the target architecture/prefix for Kbuild, not LTP userspace.
+kbuild_arch=${ARCH:?ARCH is required}
+kbuild_cross=
+[[ -n ${CHROOT_USER-} ]] || kbuild_cross=${CROSS_COMPILE-}
+unset ARCH CC HOSTCC HOSTCFLAGS CROSS_COMPILE KBUILD_OUTPUT
 
 run() {
 	CHROOT=$CHROOT_USER CHROOT_BINDS="$src $out" "$BIN"/chroot "$@"
@@ -43,17 +56,48 @@ printf 'LTP source: %s (%s)\n' "$src" "$rev"
 # Refresh autotools on the host and configure in the selected build root.
 make -C "$src" autotools
 mkdir -p "$out"
-# Cache configure probes in LTP_BUILD_DIR; later options can override the cache.
+configure=(--prefix=/ltp --config-cache
+	"--with-linux-dir=$OUTPUT_DIR" "--with-linux-version=$release")
+if ! grep -qx 'CONFIG_MODULES=y' "$OUTPUT_DIR/.config"; then
+	configure+=(--without-modules)
+fi
+# Cache configure probes in LTP_BUILD_DIR; later options can override defaults.
 # shellcheck disable=SC2086 # option lists are space-separated
-run env -C "$out" "$src/configure" --prefix=/ltp --config-cache $LTP_CONFIGURE_OPTIONS
+run env -C "$out" "$src/configure" "${configure[@]}" $LTP_CONFIGURE_OPTIONS
+
+if grep -q '^WITH_MODULES[[:space:]]*:=[[:space:]]*yes' "$out/include/mk/config.mk" &&
+	! grep -q 'KBUILD_EXTMOD_OUTPUT' "$BUILD_DIR/Makefile"; then
+	echo 'ltp: kernel lacks separate module output support; use --without-modules in LTP_CONFIGURE_OPTIONS' >&2
+	exit 1
+fi
+
+# Drop only kernel-dependent LTP artifacts; keep userspace incremental.
+for dir in "$out" "$OUTPUT_DIR/ltp"; do
+	if [[ -d $dir ]]; then
+		find "$dir" -type f \( -name .dep_modules -o -name '*.ko' \) -delete
+	fi
+done
+
+ltp_make() {
+	local dir=$1
+	shift
+	# --eval follows recursive LTP makes. Kbuild inherits the leaf's output
+	# directory through the environment; M identifies its module sub-builds.
+	run make -C "$out/$dir" -f "$src/$dir/Makefile" top_srcdir="$src" top_builddir="$out" \
+		"--eval=ifeq (\$(M),)
+export KBUILD_EXTMOD_OUTPUT := \$(CURDIR)
+else
+ARCH := $kbuild_arch
+CROSS_COMPILE := $kbuild_cross
+endif" "$@"
+}
 
 build_install() {
 	local dir=$1
 	mkdir -p "$out/$dir"
-	local mk=(make -C "$out/$dir" -f "$src/$dir/Makefile" top_srcdir="$src" top_builddir="$out")
 	# shellcheck disable=SC2086
-	run "${mk[@]}" $LTP_BUILD_OPTIONS all
-	run "${mk[@]}" DESTDIR="$OUTPUT_DIR" install
+	ltp_make "$dir" $LTP_BUILD_OPTIONS all
+	ltp_make "$dir" DESTDIR="$OUTPUT_DIR" install
 }
 
 if ((${#targets[@]} == 0)); then
@@ -61,7 +105,7 @@ if ((${#targets[@]} == 0)); then
 else
 	# Refresh the common library even when a test binary already exists.
 	# shellcheck disable=SC2086
-	run make -C "$out" -f "$src/Makefile" top_srcdir="$src" top_builddir="$out" $LTP_BUILD_OPTIONS lib-all
+	ltp_make . $LTP_BUILD_OPTIONS lib-all
 	for target in "${targets[@]}"; do
 		build_install "$target"
 	done
