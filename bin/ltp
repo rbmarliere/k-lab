@@ -2,7 +2,7 @@
 # Build LTP out of tree in LTP_BUILD_DIR through CHROOT_USER and install it into OUTPUT_DIR/ltp.
 set -e
 
-src=$(realpath -e -- "${LTP_DIR:?LTP_DIR is required}")
+src=$(realpath -e -- "${LTP_SOURCE:?set LTP_SOURCE to an LTP source tree}")
 out=$(realpath -m -- "${LTP_BUILD_DIR:?LTP_BUILD_DIR is required}")
 if [[ -e $src/include/mk/config.mk ]]; then
 	echo "ltp: $src is configured in-tree; run 'make distclean' there" >&2
@@ -18,7 +18,7 @@ for i in "${!targets[@]}"; do
 	fi
 	dir=$(realpath -e -- "$src/$target")
 	if [[ $dir != "$src/"* ]]; then
-		echo "ltp: target must be a subdirectory of LTP_DIR: $target" >&2
+		echo "ltp: target must be a subdirectory of LTP_SOURCE: $target" >&2
 		exit 1
 	fi
 	targets[i]=${dir#"$src/"}
@@ -30,6 +30,15 @@ unset ARCH CC HOSTCC HOSTCFLAGS CROSS_COMPILE
 run() {
 	CHROOT=$CHROOT_USER CHROOT_BINDS="$src $out" "$BIN"/chroot "$@"
 }
+
+rev=unversioned
+if [[ -e $src/.git ]]; then
+	rev=$(git -C "$src" rev-parse --verify HEAD 2>/dev/null || echo unversioned)
+	if [[ -n $(git --no-optional-locks -C "$src" status --porcelain 2>/dev/null) ]]; then
+		rev+=", dirty"
+	fi
+fi
+printf 'LTP source: %s (%s)\n' "$src" "$rev"
 
 # Refresh autotools on the host and configure in the selected build root.
 make -C "$src" autotools

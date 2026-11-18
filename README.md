@@ -373,8 +373,9 @@ not apply.
 
 ## LTP
 
-Set `LTP_GIT` in `setup.conf` to an LTP worktree, or set `LTP_DIR` per test.
-Include `include/ltp.conf` and add `${BUILD_LTP}` to `POST_BUILD_APPEND`:
+Set `LTP_SOURCE` in `setup.conf` for a default LTP worktree, or set it in the
+test config. Include `include/ltp.conf` and add `${BUILD_LTP}` to
+`POST_BUILD_APPEND`, for example:
 
 ```conf
 ARCH := x86_64
@@ -384,6 +385,7 @@ INCLUDE ${KLAB_DIR}/include/ltp.conf
 DEFAULTS OVERRIDE
 ROOT_DISK = /path/to/x86_64.img
 CHROOT_USER = /path/to/x86_64/rootfs
+LTP_SOURCE = /path/to/ltp-worktree
 LTP_TARGETS = testcases/kernel/syscalls/getpid
 POST_BUILD_APPEND = ${BUILD_LTP}
 
@@ -419,12 +421,14 @@ Subset mode skips the top-level installation; run selected tests directly.
 Existing installed files are not removed. Unknown directories and build
 failures stop the run; there is no full-build fallback.
 
-Changes to architecture, build root, toolchain or compiler flags need fresh LTP
-build state. A separate test config file provides a new default workspace and
-LTP build directory. If `LTP_BUILD_DIR` is explicitly set, use a fresh
-directory too. After installing or updating build dependencies, remove
-`LTP_BUILD_DIR/config.cache` before the next build so configure refreshes its
-probe results.
+Changing `LTP_SOURCE` does not change the build or install directories. For a
+clean comparison between worktrees, use a fresh `LTP_BUILD_DIR` and start with
+an empty `OUTPUT_DIR/ltp`. Sequential runs can reuse the same test config and
+kernel build.
+
+Use a fresh `LTP_BUILD_DIR` when changing architecture, build root, toolchain
+or compiler flags. After installing or updating build dependencies, remove
+`LTP_BUILD_DIR/config.cache` so configure refreshes its probe results.
 
 ## SUSE kernel configuration
 
