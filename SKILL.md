@@ -1,17 +1,17 @@
 ---
 name: k-lab
-description: Build, boot, and test kernel worktrees with k-lab. Use when asked to verify kernel behavior or reproduce a reported defect.
+description: Build, boot, and test kernel worktrees with k-lab. Use when asked to verify kernel behavior, reproduce a reported defect, or run a selected test.
 ---
 
 # k-lab
 
 ## Goal
 
-Use k-lab to build the current kernel worktree, optionally boot it, and verify
-behavior or reproduce a reported defect. Read any supplied report, log, or
-commit first; identify the exact trigger and assertion. Ask only for
-information needed to proceed, including the goal or a ROOT_DISK for boot tests
-if neither can be established from the task or an existing test.
+Use k-lab to build the selected kernel worktree, optionally boot it, and verify
+behavior, reproduce a reported defect, or run a selected test. Read any
+supplied resource, such as a report, log, or commit first; identify the trigger
+and assertion. Ask only for missing inputs needed to proceed, such as the goal
+or `ROOT_DISK` for a boot test.
 
 Tool output stays in context. Use `grep -n`, `wc -l`, and bounded line ranges;
 do not print whole logs, file listings, or verbose command output.
@@ -22,24 +22,31 @@ the unfixed tree and pass once fixed.
 ## Baseline first
 
 Validate supplied paths and configured tools before investigating internals.
-Confirm substitutions for missing inputs. Once the upstream command, build
+Confirm substitutions for missing inputs. Once the test command, build
 dependencies and required kernel options are known, prepare and dry-run the
 config, then launch one unchanged baseline. Defer history searches and generic
 CI/harness investigation until an observed failure requires them.
 
-Before launching, record the reported failure signature from the job log: exact
-messages, source locations, failing phase and elapsed time. If the log is
-unreachable, ask the user for the relevant excerpt; do not proceed on a summary
-alone.
+Before launching, establish the command and expected result:
 
-Run the test through its own entry point with the arguments the job used,
-unmodified. Add instrumentation, loops or wrappers only after the baseline
-result is known.
+- **Reported job:** Record the exact failure messages, source locations,
+  failing phase and elapsed time from the job log. If the log is unreachable,
+  ask for the relevant excerpt; do not proceed on a summary alone. Run the test
+  through its own entry point with the arguments the job used.
+- **Selected test:** Identify the test source and revision, native entry point,
+  arguments, prerequisites and expected behavior from the request, test or
+  patch. No prior failure or job log is required. Where the suite supports it,
+  build only the targets and helpers the selected test needs. If asked to
+  compare kernels, run the same test revision and invocation on each specified
+  worktree.
 
-If ARCH differs from the host, the guest runs under QEMU TCG without KVM.
-Before launching, state this, the emulated CPU model and the expected slowdown
-as unmatched job conditions. For timing-sensitive defects, say that
-reproduction is unlikely and ask whether to proceed.
+Run the test unmodified. Add instrumentation, loops or wrappers only after the
+baseline result is known.
+
+If `ARCH` differs from the host, the guest runs under QEMU TCG without KVM.
+Before launching, state this, the emulated CPU model and the expected slowdown.
+Flag these as unmatched conditions when reproducing a job. For timing-sensitive
+defects, say that reproduction is unlikely and ask whether to proceed.
 
 ## Prepare the test
 
@@ -58,9 +65,9 @@ checkout. Run it directly from the selected worktree's Git root; do not
 source `k-lab.sh` or rely on `PATH`.
 
 Do not inspect or modify k-lab harness source (`bin/`, `tools/`, ktest) unless
-asked. Read the test suite's shared library and helpers only when a failure
-matching the reported signature points there; do not modify them unless asked.
-Kernel code and history are in scope.
+asked. Read the test suite's shared library and helpers only when a matching
+job failure or the selected test's failed assertion points there; do not modify
+them unless asked. Kernel code and history are in scope.
 
 Keep all run settings in the test config and its includes, including resources,
 test targets and iteration counts. Never set them with `kt -D` or shell-prefix
@@ -69,12 +76,12 @@ toolchain explicitly. Do not infer a build root or compiler from an image
 filename or assume that a rootfs has the guest libraries and build
 dependencies.
 
-Start each investigation in its own `tests/<name>/` with a `test` config,
-fragments and reproducer files unless the user selects an existing test. Use
-kebab-case (e.g. `tests/foo-bar`); do not search for reuse candidates unless
-asked. Keep related experiments in the established directory even if the
-hypothesis, kernel version, backend or subagent changes. Pass the directory
-along in handoffs and delegation.
+Start each investigation in its own `tests/<name>/` with a `test` config and
+any needed fragments or scripts, unless the user selects an existing k-lab
+config. Use kebab-case (e.g. `tests/foo-bar`); do not search for reuse
+candidates unless asked. Keep related experiments in the established directory
+even if the hypothesis, kernel version, backend or subagent changes. Pass the
+directory along in handoffs and delegation.
 
 For related sequential variants with a compatible build environment, prefer
 conditional `TEST_START` sections and an explicit `TEST := <variant>` selector
@@ -83,11 +90,12 @@ directory for independent workspaces, build environments, concurrency or
 readability. Share scripts and fragments where appropriate; separate assertions
 may use separate scripts in the same directory.
 
-Keep verdict logic in a standalone script: exit 0 for expected behavior,
-nonzero for a violated assertion, and distinguish setup errors from the defect.
-Preserve setup and preceding output in the test log or under `/mnt/build`. When
-the defect may depend on resources, record the relevant system state
-immediately before the assertion.
+Use an existing test's native verdict. For a custom reproducer, keep verdict
+logic in a standalone script: exit 0 for expected behavior, nonzero for a
+violated assertion, and distinguish setup errors from the defect. Preserve
+setup and preceding output in the test log or under `/mnt/build`. When the
+defect may depend on resources, record the relevant system state immediately
+before the assertion.
 
 - Write every `INCLUDE` path as `${KLAB_DIR}/...`, never relative.
 - Stage task files in `OUTPUT_DIR`. Extend hooks with `*_APPEND`; replace a
@@ -106,9 +114,9 @@ immediately before the assertion.
 
 Leave `RUN_TIMEOUT` unset by default: it limits individual `ktest.pl` commands,
 including kernel cleaning and building. Bound the guest command separately
-(e.g. `TEST = ${SSH} timeout 300 sh ./run.sh`) based on the job log. Check the
-first iteration's output before waiting on more. Inspect a guest timeout rather
-than extending the wait.
+(e.g. `TEST = ${SSH} timeout 300 sh ./run.sh`) based on the job log or the
+test's expected runtime. Check the first iteration's output before waiting on
+more. Inspect a guest timeout rather than extending the wait.
 
 1. Run `kt -n <name>/test` and check `TMP_DIR` and the resolved environment:
    RAM, CPUs (`VNG_ARGS`), `--systemd`, disk, architecture and snapshots.
@@ -127,12 +135,14 @@ than extending the wait.
    diagnostics. For VM mismatches, inspect the recorded vng invocation and QEMU
    preview rather than bypassing the wrapper.
 
-Compare every failure with the reported signature before investigating. A
-failure in a different phase or with a different message is a blocker, not
-kernel evidence. Treat rootfs ownership, mount or dependency errors and
-incompatible environments as blockers too. Stop and report the decisive output.
+For job reproduction, compare every failure with the reported signature before
+investigating. A different phase or message is a blocker, not kernel evidence.
+For selected tests, report skips separately from passes and assertion failures.
+Treat setup or unrelated failures, including rootfs ownership, mount and
+dependency errors and incompatible environments, as blockers. Stop on a blocker
+and report the decisive output.
 
-A launch that does not reach the reported assertion counts as an attempt. Stop
+A launch that does not reach the intended assertion counts as an attempt. Stop
 after three, report the blocker, and ask before further attempts. An expected
 defect is a valid reproduction result, not an unsuccessful attempt.
 
@@ -142,9 +152,9 @@ defect is a valid reproduction result, not an unsuccessful attempt.
   packages, provision images, switch disks or build modes, weaken assertions,
   debug test-suite tooling, the C library, compilers or the emulator, or write
   new diagnostic programs.
-- Match relevant job conditions (userspace, config, compiler, CPUs, services,
-  swap, memory available at test start, preceding tests, security settings,
-  load).
+- When reproducing a job, match relevant conditions (userspace, config,
+  compiler, CPUs, services, swap, memory available at test start, preceding
+  tests, security settings, load).
 - After the unchanged baseline, use controlled VM changes to test a specific
   hypothesis. For example, add `netem` delay to a test interface, pin the
   workload with `taskset` and add bounded CPU load, or introduce bounded guest
@@ -169,9 +179,11 @@ defect is a valid reproduction result, not an unsuccessful attempt.
 
 ## Report
 
-State the goal and assertion, test path, exact commands and environment,
-result, and artifact paths. For flaky defects, report failures/attempts, not
-just one green run. List job conditions that matched or differed, and any
-conditions the test imposed. Include decisive failure output. If asked for root
-cause, give the provenance evidence and proposed resolution. State what remains
-unverified; a green test alone does not establish root cause.
+State the goal and assertion, test path, exact commands and environment, and
+artifact paths. For each run, give the kernel and (if applicable) suite
+revisions, including any local patches, and the expected and observed verdict.
+For flaky defects, report failures/attempts, not just one green run. List any
+conditions the test imposed and, for a reported job, those that matched or
+differed. Include decisive failure output. If asked for root cause, give the
+provenance evidence and proposed resolution. State what remains unverified; a
+green test alone does not establish root cause.
