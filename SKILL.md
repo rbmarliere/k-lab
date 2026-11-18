@@ -86,9 +86,10 @@ directory along in handoffs and delegation.
 For related sequential variants with a compatible build environment, prefer
 conditional `TEST_START` sections and an explicit `TEST := <variant>` selector
 in the existing config. Use separate configs in the same investigation
-directory for independent workspaces, build environments, concurrency or
-readability. Share scripts and fragments where appropriate; separate assertions
-may use separate scripts in the same directory.
+directory when the baseline must remain unchanged, or for independent
+workspaces, build environments, concurrency or readability. Temporary variants
+follow the same directory rule. Share scripts and fragments where appropriate;
+separate assertions may use separate scripts in the same directory.
 
 Use an existing test's native verdict. For a custom reproducer, keep verdict
 logic in a standalone script: exit 0 for expected behavior, nonzero for a
