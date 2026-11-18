@@ -100,10 +100,11 @@ before the assertion.
 - Write every `INCLUDE` path as `${KLAB_DIR}/...`, never relative.
 - Stage task files in `OUTPUT_DIR`. Extend hooks with `*_APPEND`; replace a
   whole hook only deliberately.
-- Keep build-affecting settings in a matching profile under `profiles/`; add
-  one if none matches. Use `-C` for relaunches with the same architecture,
-  compiler and build environment. If any change, use a separate config with a
-  fresh workspace and build output rather than changing a shared build.
+- Keep build-affecting settings in the test config. Use or create a profile
+  only at the user's explicit request. Use `-C` for relaunches with the same
+  architecture, compiler and build environment. If any change, use a separate
+  config with a fresh workspace and build output rather than changing a shared
+  build.
 - Let `kt` manage `TMP_DIR`. Before concurrent runs, check workspace, output
   directory and VM port isolation.
 - Keep default disk snapshots. Use the run's `TMP_DIR/ssh` helper rather than
@@ -138,13 +139,17 @@ more. Inspect a guest timeout rather than extending the wait.
 For job reproduction, compare every failure with the reported signature before
 investigating. A different phase or message is a blocker, not kernel evidence.
 For selected tests, report skips separately from passes and assertion failures.
-Treat setup or unrelated failures, including rootfs ownership, mount and
-dependency errors and incompatible environments, as blockers. Stop on a blocker
-and report the decisive output.
 
-A launch that does not reach the intended assertion counts as an attempt. Stop
-after three, report the blocker, and ask before further attempts. An expected
-defect is a valid reproduction result, not an unsuccessful attempt.
+Any environment issue is an immediate hard stop, whether found during setup or
+a run. This includes ownership, mount, dependency, toolchain and compatibility
+problems. Report the decisive output and ask the user how to proceed. Do not
+repair the environment, switch `ROOT_DISK`, build roots or toolchains, or retry
+without explicit user approval.
+
+For non-environment failures, a launch that does not reach the intended
+assertion counts as an attempt. Stop after three and ask before further
+attempts. An expected defect is a valid reproduction result, not an
+unsuccessful attempt.
 
 ## Boundaries and root cause
 

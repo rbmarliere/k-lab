@@ -238,39 +238,21 @@ differ from the actual launch.
 
 ## Workspaces and build reuse
 
-`kt` manages `TMP_DIR`, choosing `tmp/<worktree>-<config>` under the `k-lab`
-checkout and protecting it with `flock`. The workspace follows the test config
-path, not its `TEST` selector, so conditional variants in one test config share
-it. Concurrent runs need separate test config files, workspaces, output
-directories and `VNG_PORT` values. The default SSH port is 22000; there is no
-automatic port allocation.
+`kt` keeps each workspace (`TMP_DIR`) in `tmp/<worktree>-<config>` under the
+`k-lab` checkout. Conditional cases in one config share a workspace. Concurrent
+runs need separate configs, workspaces, output directories and `VNG_PORT`
+values (default 22000; no automatic port allocation).
 
-Tests can share a kernel build by setting the same `OUTPUT_DIR`, while each
-keeps its own `TMP_DIR` for logs and status. `kt` also locks `OUTPUT_DIR`, so
-only one run uses a build at a time.
+Build output defaults to `OUTPUT_DIR = ${TMP_DIR}/build`. Tests can share a
+kernel build by setting the same `OUTPUT_DIR`, while keeping logs and status in
+their own `TMP_DIR`. `kt` locks both directories to prevent simultaneous use.
+When switching toolchains, build roots, or source trees, clean before reusing
+`OUTPUT_DIR` or use a fresh one.
 
-Profiles under `profiles/` are reusable configuration includes that can bundle
-product, toolchain, path and build output settings. Profiles are local, like
-most tests; `profiles/Tumbleweed-x86_64.conf` is the tracked example.
-
-Sharing an output directory also shares build state. When switching toolchains,
-build roots, or source trees, clean before reusing `OUTPUT_DIR` or use a fresh
-one.
-
-This example uses a profile for build settings and adds a guest script:
-
-```conf
-ARCH := x86_64
-INCLUDE ${KLAB_DIR}/include/defaults.conf
-INCLUDE ${KLAB_DIR}/profiles/Tumbleweed-x86_64.conf
-
-DEFAULTS OVERRIDE
-POST_BUILD_APPEND = cp ${KLAB_DIR}/tests/my-test/run.sh ${OUTPUT_DIR}/run.sh
-
-TEST_START
-TEST_TYPE = test
-TEST = ${SSH} sh ./run.sh
-```
+Profiles under `profiles/` are optional, reusable configuration includes, just
+like those in `include/`, but aimed for specialized build settings and rootfs
+paths. Most profiles are local, like tests; `profiles/Tumbleweed-x86_64.conf`
+is the tracked example.
 
 ## Architecture and toolchains
 
