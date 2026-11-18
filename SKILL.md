@@ -106,11 +106,14 @@ before the assertion.
   architecture, compiler and build environment. If any change, use a separate
   config with a fresh workspace and build output rather than changing a shared
   build.
-- Let `kt` manage `TMP_DIR`. Before concurrent runs, check workspace, output
+- Let `kt` manage `TMP_DIR`. Keep additional host-side records, including
+  copied logs and requested summaries, within that workspace; do not create
+  sibling result directories. Before concurrent runs, check workspace, output
   directory and VM port isolation.
 - Keep default disk snapshots. Use the run's `TMP_DIR/ssh` helper rather than
-  assembling a separate SSH command. Save artifacts in the exported build
-  output, not in source commits. Do not delete unrelated build state.
+  assembling a separate SSH command.
+- Keep build and guest-generated artifacts in `OUTPUT_DIR`. Do not commit run
+  artifacts or delete unrelated build state.
 
 ## Run and iterate
 
@@ -130,12 +133,12 @@ more. Inspect a guest timeout rather than extending the wait.
    timeout does not stop the run: check it rather than relaunching. Confirm
    completion (`exit=<code>`) from the reported status, not the command return
    code. A runner exit code or log pattern alone is not a verdict.
-4. Check the focused log for the failed phase: test for assertions, build for
-   compiler errors, VM for boot problems, or runner for background launch
-   errors. Follow this run's `Saved info to` path, not the newest archive. Use
-   `ktestlog` for phase decisions and captured guest output for kernel
-   diagnostics. For VM mismatches, inspect the recorded vng invocation and QEMU
-   preview rather than bypassing the wrapper.
+4. Inspect logs in place under the reported `TMP_DIR`, matching the kernel
+   revision and test invocation, not file recency. Focus on the failed phase:
+   test for assertions, build for compiler errors, VM for boot problems, or
+   runner for background launch errors. Use `ktestlog` for phase decisions and
+   captured guest output for kernel diagnostics. For VM mismatches, inspect the
+   recorded vng invocation and QEMU preview rather than bypassing the wrapper.
 
 For job reproduction, compare every failure with the reported signature before
 investigating. A different phase or message is a blocker, not kernel evidence.
