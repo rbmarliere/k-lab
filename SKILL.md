@@ -191,8 +191,11 @@ unsuccessful attempt.
 
 ## Report
 
-State the goal and assertion, test path, exact commands and environment, and
-artifact paths. For each run, give the kernel and (if applicable) suite
+Give absolute paths for the test config directory and each run's `TMP_DIR`.
+State whether the test config was created, modified, or reused unchanged.
+
+Then state the goal and assertion, test path, exact commands and environment.
+For each run, give the kernel and (if applicable) suite
 revisions, including any local patches, and the expected and observed verdict.
 For flaky defects, report failures/attempts, not just one green run. List any
 conditions the test imposed and, for a reported job, those that matched or
