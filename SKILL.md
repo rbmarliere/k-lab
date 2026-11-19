@@ -85,9 +85,12 @@ directory along in handoffs and delegation.
 
 For related sequential variants with a compatible build environment, prefer
 conditional `TEST_START` sections and an explicit `TEST := <variant>` selector
-in the existing config. Use separate configs in the same investigation
-directory when the baseline must remain unchanged, or for independent
-workspaces, build environments, concurrency or readability. Temporary variants
+in the existing config. Adding a conditional `TEST_START` section leaves
+existing sections unchanged; it does not count as modifying the baseline.
+Create a separate config in the same investigation directory only for an
+incompatible build environment, independent workspaces, concurrent runs, or
+when the user explicitly requires the config file to stay untouched, not
+because a handoff asks to preserve the config. Temporary variants
 follow the same directory rule. Share scripts and fragments where appropriate;
 separate assertions may use separate scripts in the same directory.
 
