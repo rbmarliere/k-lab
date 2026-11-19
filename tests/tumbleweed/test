@@ -25,16 +25,16 @@ TEST = ${SSH} sleep infinity
 
 TEST_START IF ${TEST} == chroot
 TEST_TYPE = build
-CHROOT_KERNEL = /roots/opensuse/tumbleweed/x86_64
+CHROOT_KERNEL = ${ROOTS_DIR}/opensuse/tumbleweed/x86_64
 
 TEST_START IF ${TEST} == chroot-boot
 TEST_TYPE = test
-CHROOT_KERNEL = /roots/opensuse/tumbleweed/x86_64
+CHROOT_KERNEL = ${ROOTS_DIR}/opensuse/tumbleweed/x86_64
 TEST = ${SSH} test -b /dev/vda
 
 TEST_START IF ${TEST} == ltp
 TEST_TYPE = test
-CHROOT_USER = /roots/opensuse/tumbleweed/x86_64
+CHROOT_USER = ${ROOTS_DIR}/opensuse/tumbleweed/x86_64
 LTP_TARGETS = testcases/kernel/syscalls/getpid
 POST_BUILD_APPEND = ${BUILD_LTP}
 TEST = ${SSH} env LTPROOT=/mnt/build/ltp /mnt/build/ltp/testcases/bin/getpid01
