@@ -251,7 +251,7 @@ When switching toolchains, build roots, or source trees, clean before reusing
 
 Profiles under `profiles/` are optional, reusable configuration includes, just
 like those in `include/`, but aimed for specialized build settings and rootfs
-paths. Most profiles are local, like tests; `profiles/Tumbleweed-x86_64.conf`
+paths. Most profiles are local, like tests; `profiles/tumbleweed-x86_64.conf`
 is the tracked example.
 
 ## Architecture and toolchains
@@ -455,8 +455,8 @@ self-reference retains it only in a test section; do not use it to redefine
 ## Sample
 
 [The Tumbleweed sample](tests/tumbleweed/test) includes the [x86_64
-profile](profiles/Tumbleweed-x86_64.conf), which selects the SUSE `stable`
-kernel config and sets `ROOT_DISK` to `/roots/Tumbleweed/x86_64.img`. Set
+profile](profiles/tumbleweed-x86_64.conf), which selects the SUSE `stable`
+kernel config and sets `ROOT_DISK` to `/roots/opensuse/tumbleweed/x86_64.img`. Set
 `SUSE_KERNEL_SOURCE_GIT` in `setup.conf` to the tree containing
 `stable/config/x86_64/default`. Only modes that boot a VM need the disk image.
 
@@ -473,10 +473,10 @@ Use `-D TEST:=<mode>` for one run, or edit `TEST := build` in the test file to
 change the default.
 
 The test file sets the chroot paths per mode. `chroot` and `chroot-boot` build
-the kernel in `/roots/Tumbleweed/x86_64`; `ltp` uses that rootfs to build LTP,
+the kernel in `/roots/opensuse/tumbleweed/x86_64`; `ltp` uses that rootfs to build LTP,
 not the kernel. `bpf` runs the `bpf:test_progs` selftest.
 
-All modes share `tmp/build-Tumbleweed-x86_64` and skip cleaning by default. See
+All modes share `tmp/build-tumbleweed-x86_64` and skip cleaning by default. See
 [build reuse](#workspaces-and-build-reuse) before switching build environments.
 
 ## Agent skill
