@@ -105,10 +105,15 @@ before the assertion.
 - Stage task files in `OUTPUT_DIR`. Extend hooks with `*_APPEND`; replace a
   whole hook only deliberately.
 - Keep build-affecting settings in the test config. Use or create a profile
-  only at the user's explicit request. Use `-C` for relaunches with the same
-  architecture, compiler and build environment. If any change, use a separate
-  config with a fresh workspace and build output rather than changing a shared
-  build.
+  only at the user's explicit request. A user-selected profile's build
+  settings (`OUTPUT_DIR`, `BUILD_NOCLEAN`, compiler, build root) are binding:
+  do not override them in a test config without explicit approval. Kernel
+  config changes (e.g. enabling an option) reuse the profile's build output.
+  Use `-C` for relaunches with the same architecture, compiler and build
+  environment. If the architecture or compiler must change, or a fresh build
+  output seems necessary, stop and ask, stating the expected rebuild cost.
+  Without a selected profile, use a separate config with a fresh workspace and
+  build output rather than changing a shared build.
 - Let `kt` manage `TMP_DIR`. Keep additional host-side records, including
   copied logs and requested summaries, within that workspace; do not create
   sibling result directories. Before concurrent runs, check workspace, output
@@ -161,7 +166,8 @@ unsuccessful attempt.
 ## Boundaries and root cause
 
 - Without approval, do not repair the environment, run `setup.sh`, install
-  packages, provision images, switch disks or build modes, weaken assertions,
+  packages, provision images, switch disks or build modes, override a
+  selected profile's build settings, weaken assertions,
   debug test-suite tooling, the C library, compilers or the emulator, or write
   new diagnostic programs.
 - When reproducing a job, match relevant conditions (userspace, config,
