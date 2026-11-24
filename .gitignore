@@ -4,4 +4,4 @@ tools/*
 !tools/.gitkeep
 virtme-ng
 profiles/*
-!profiles/tumbleweed-x86_64.conf
+!profiles/suse-stable-x86_64.conf

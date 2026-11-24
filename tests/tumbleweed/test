@@ -1,6 +1,6 @@
 ARCH := x86_64
 INCLUDE ${KLAB_DIR}/include/defaults.conf
-INCLUDE ${KLAB_DIR}/profiles/tumbleweed-x86_64.conf
+INCLUDE ${KLAB_DIR}/profiles/suse-stable-x86_64.conf
 
 DEFAULTS IF NOT DEFINED TEST
 TEST := build

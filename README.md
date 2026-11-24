@@ -251,7 +251,7 @@ When switching toolchains, build roots, or source trees, clean before reusing
 
 Profiles under `profiles/` are optional, reusable configuration includes, just
 like those in `include/`, but aimed for specialized build settings and rootfs
-paths. Most profiles are local, like tests; `profiles/tumbleweed-x86_64.conf`
+paths. Most profiles are local, like tests; `profiles/suse-stable-x86_64.conf`
 is the tracked example.
 
 ## Architecture and toolchains
@@ -455,7 +455,7 @@ self-reference retains it only in a test section; do not use it to redefine
 ## Sample
 
 [The Tumbleweed sample](tests/tumbleweed/test) includes the [x86_64
-profile](profiles/tumbleweed-x86_64.conf), which selects the SUSE `stable`
+profile](profiles/suse-stable-x86_64.conf), which selects the SUSE `stable`
 kernel config and sets `ROOT_DISK` to
 `${ROOTS_DIR}/opensuse/tumbleweed/x86_64.img`. Set `SUSE_KERNEL_SOURCE_GIT` in
 `setup.conf` to the tree containing `stable/config/x86_64/default`. Only modes
@@ -477,7 +477,7 @@ The test file sets the chroot paths per mode. `chroot` and `chroot-boot` build
 the kernel in `${ROOTS_DIR}/opensuse/tumbleweed/x86_64`; `ltp` uses that rootfs
 to build LTP, not the kernel. `bpf` runs the `bpf:test_progs` selftest.
 
-All modes share `tmp/build-tumbleweed-x86_64` and skip cleaning by default. See
+All modes share `tmp/build-suse-stable-x86_64` and skip cleaning by default. See
 [build reuse](#workspaces-and-build-reuse) before switching build environments.
 
 ## Agent skill
