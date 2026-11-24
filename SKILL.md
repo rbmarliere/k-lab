@@ -107,8 +107,10 @@ before the assertion.
 - Keep build-affecting settings in the test config. Use or create a profile
   only at the user's explicit request. A user-selected profile's build
   settings (`OUTPUT_DIR`, `BUILD_NOCLEAN`, compiler, build root) are binding:
-  do not override them in a test config without explicit approval. Kernel
-  config changes (e.g. enabling an option) reuse the profile's build output.
+  do not override them in a test config without explicit approval. Before
+  changing the kernel config while using a selected profile (e.g. through
+  `ADD_CONFIG`), describe the proposed changes and ask for explicit approval.
+  Approved kernel config changes reuse the profile's build output.
   Use `-C` for relaunches with the same architecture, compiler and build
   environment. If the architecture or compiler must change, or a fresh build
   output seems necessary, stop and ask, stating the expected rebuild cost.
