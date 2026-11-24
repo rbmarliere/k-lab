@@ -135,8 +135,15 @@ more. Inspect a guest timeout rather than extending the wait.
 
 1. Run `kt -n <name>/test` and check `TMP_DIR` and the resolved environment:
    RAM, CPUs (`VNG_ARGS`), `--systemd`, disk, architecture and snapshots.
-2. Run `kt -b <name>/test` for long runs; retain the reported `TMP_DIR` and
-   `ktlog` path. Use `kt -y <name>/test` for foreground runs.
+2. Run `kt -b <name>/test` for long runs and `kt -y <name>/test` for
+   foreground runs. After each successful background launch or relaunch,
+   immediately post only the absolute path to `$TMP_DIR/ktestlog` in the
+   user-visible conversation before waiting. If delegated, immediately send
+   the path to the delegating agent through the harness's progress or
+   supervisor channel, without waiting for completion, even when detached.
+   When delegating a launch, run `kt -n <name>/<config>` first
+   and post the resulting `$TMP_DIR/ktestlog` path in the same reply as the
+   delegation.
 3. Use `kt status <name>/test` for immediate checks and
    `kt wait -t 240 <name>/test` for bounded waits. Use the launch worktree
    and config; keep the config unchanged while the run is active. A wait
