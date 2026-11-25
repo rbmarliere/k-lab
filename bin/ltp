@@ -63,7 +63,8 @@ if ! grep -qx 'CONFIG_MODULES=y' "$OUTPUT_DIR/.config"; then
 fi
 # Cache configure probes in LTP_BUILD_DIR; later options can override defaults.
 # shellcheck disable=SC2086 # option lists are space-separated
-run env -C "$out" "$src/configure" "${configure[@]}" $LTP_CONFIGURE_OPTIONS
+# No env -C: SLE12 coreutils 8.25 lacks it.
+run sh -c 'cd "$1" && shift && exec "$@"' sh "$out" "$src/configure" "${configure[@]}" $LTP_CONFIGURE_OPTIONS
 
 if grep -q '^WITH_MODULES[[:space:]]*:=[[:space:]]*yes' "$out/include/mk/config.mk" &&
 	! grep -q 'KBUILD_EXTMOD_OUTPUT' "$BUILD_DIR/Makefile"; then
