@@ -80,8 +80,8 @@ Start each investigation in its own `tests/<name>/` with a `test` config and
 any needed fragments or scripts, unless the user selects an existing k-lab
 config. Use kebab-case (e.g. `tests/foo-bar`); do not search for reuse
 candidates unless asked. Keep related experiments in the established directory
-even if the hypothesis, kernel version, backend or subagent changes. Pass the
-directory along in handoffs and delegation.
+even if the hypothesis, kernel version, backend or subagent changes. Report the
+directory in handoffs and final reports so later runs can reuse it.
 
 For related sequential variants with a compatible build environment, prefer
 conditional `TEST_START` sections and an explicit `TEST := <variant>` selector
@@ -142,9 +142,8 @@ more. Inspect a guest timeout rather than extending the wait.
    one, in the user-visible conversation before waiting. If delegated,
    immediately send them to the delegating agent through the harness's
    progress or supervisor channel, without waiting for completion, even when
-   detached. When delegating a launch, run `kt -n <name>/<config>` first and
-   post the resulting `ktestlog` path, config path and variant in the same
-   reply as the delegation.
+   detached. Put the `ktestlog` path on the first line; some harnesses show
+   only the first line of a progress message.
 3. Use `kt status <name>/test` for immediate checks and
    `kt wait -t 240 <name>/test` for bounded waits. Use the launch worktree
    and config; keep the config unchanged while the run is active. A wait
