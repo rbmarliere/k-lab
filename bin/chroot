@@ -1,4 +1,12 @@
 #!/usr/bin/env bash
+# Run a build in CHROOT, or on the host if CHROOT is empty. The caller
+# maps to root inside a user namespace, so no sudo or chown is needed.
+# The base rootfs is the read-only lower layer. Mounts last for one
+# invocation; the user-owned upper layer persists under TMP_DIR/chroot.
+#
+# Bind targets are created in the upper layer, but the actual source and
+# output stay at their host paths: /home/linux is still /home/linux inside.
+# /tmp is separate scratch space in the upper layer, used as HOME and TMPDIR.
 set -e
 
 if [[ ${1-} != --mounted ]]; then
@@ -15,16 +23,25 @@ if [[ ${1-} != --mounted ]]; then
 fi
 shift
 
+upper=$OVERLAY/upper
 root=$OVERLAY/merged
+read -r -a extra_binds <<< "${CHROOT_BINDS-}"
+binds=("$BUILD_DIR" "$OUTPUT_DIR" "${extra_binds[@]}")
+
+# Seed mount targets and /tmp before mounting: namespace root cannot write
+# into system-owned lower directories.
+mkdir -p -- "$upper"/{proc,dev,sys,tmp}
+for dir in "${binds[@]}"; do
+	mkdir -p -- "$upper$dir"
+done
+
 mount -t overlay overlay \
-	-o "lowerdir=$CHROOT,upperdir=$OVERLAY/upper,workdir=$OVERLAY/work" "$root"
-mkdir -p "$root"/{proc,dev,sys,tmp}
+	-o "lowerdir=$CHROOT,upperdir=$upper,workdir=$OVERLAY/work" "$root"
 mount -t proc proc "$root/proc"
 mount --rbind /dev "$root/dev"
 mount --rbind /sys "$root/sys"
-# shellcheck disable=SC2086 # CHROOT_BINDS is a space-separated list
-for dir in "$BUILD_DIR" "$OUTPUT_DIR" ${CHROOT_BINDS-}; do
-	mount --mkdir --rbind "$dir" "$root$dir"
+for dir in "${binds[@]}"; do
+	mount --rbind "$dir" "$root$dir"
 done
 
 trap 'exit 130' INT

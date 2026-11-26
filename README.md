@@ -305,13 +305,16 @@ POST_BUILD_APPEND = cp ${KLAB_DIR}/tests/my-test/repro.c ${OUTPUT_DIR}/ && ${RUN
 
 Each rootfs gets a writable overlay under `TMP_DIR/chroot/`. The mounts
 disappear when the command exits, but the overlay changes persist. The base
-rootfs is not modified. Source and output are mounted at their host paths;
-`bin/chroot` also binds the space-separated paths in `CHROOT_BINDS`.
+rootfs is not modified; use a fresh overlay after updating it. Source and output
+are mounted at their host paths. [`bin/chroot`](bin/chroot) also binds the
+space-separated paths in `CHROOT_BINDS`.
 
-The whole rootfs must be owned by the invoking user and contain the build
-dependencies. Chroot builds need unprivileged user namespaces, overlayfs, and
-util-linux with `--forward-signals`. Foreign roots also need host
-qemu-user/binfmt registration.
+No `sudo` or `chown` is needed. The invoking user must be able to access the
+rootfs's build tools and their dependencies.
+
+Chroot builds need unprivileged user namespaces, overlayfs, and util-linux
+with `--forward-signals`. Foreign roots also need host qemu-user/binfmt
+registration.
 
 ## Selftests
 
