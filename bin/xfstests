@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Build and install a private copy of xfstests in OUTPUT_DIR.
+set -eo pipefail
+
+src=$(realpath -e -- "${XFSTESTS_SOURCE:?set XFSTESTS_SOURCE to an xfstests source tree}")
+OUTPUT_DIR=$(realpath -e -- "${OUTPUT_DIR:?OUTPUT_DIR is required}")
+export OUTPUT_DIR
+dest=$OUTPUT_DIR/xfstests
+if [[ ! -f $src/check || ! -f $src/Makefile || ! -f $src/include/builddefs.in ]]; then
+	echo 'xfstests: XFSTESTS_SOURCE must name an xfstests source tree' >&2
+	exit 1
+fi
+if [[ -e $src/include/builddefs ]]; then
+	echo "xfstests: $src is configured in-tree; use an unconfigured source tree" >&2
+	exit 1
+fi
+if [[ $OUTPUT_DIR == / || $OUTPUT_DIR/ == "$src/"* || $src/ == "$dest/"* ]]; then
+	echo 'xfstests: source and build staging must not overlap' >&2
+	exit 1
+fi
+if [[ -L $dest || ( -e $dest && ! -f $dest/.k-lab-install ) ]]; then
+	echo "xfstests: refusing to replace unmanaged path $dest" >&2
+	exit 1
+fi
+
+rev=unversioned
+if [[ -e $src/.git ]]; then
+	rev=$(git -C "$src" rev-parse HEAD 2>/dev/null || echo unversioned)
+	if [[ -n $(git --no-optional-locks -C "$src" status --porcelain 2>/dev/null) ]]; then
+		rev+=", dirty"
+	fi
+fi
+printf 'xfstests source: %s (%s)\n' "$src" "$rev"
+
+stage=$(mktemp -d -- "$OUTPUT_DIR/.xfstests.XXXXXX")
+cleanup() {
+	if [[ -d $stage/old && ! -e $dest ]]; then
+		mv -T -- "$stage/old" "$dest" || return
+	fi
+	rm -rf --one-file-system -- "$stage"
+}
+trap cleanup EXIT
+mkdir -- "$stage/src"
+tar -cf - -C "$src" --exclude='./.git' --exclude='./local.config' --exclude='./results' . |
+	tar -xf - -C "$stage/src"
+
+unset ARCH CC HOSTCC HOSTCFLAGS CROSS_COMPILE KBUILD_OUTPUT
+run() {
+	CHROOT=${CHROOT_USER-} "$BIN"/chroot make -C "$stage/src" "$@"
+}
+
+# Configure/build first; install needs the generated include/builddefs.
+run "$@" default
+run "$@" -j1 "PKG_LIB_DIR=$stage/install" install
+: >"$stage/install/.k-lab-install"
+if [[ -d $dest ]]; then
+	mv -T -- "$dest" "$stage/old"
+fi
+mv -T -- "$stage/install" "$dest"

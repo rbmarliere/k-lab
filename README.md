@@ -31,9 +31,9 @@ kernel worktree + test configuration
 ```
 
 You provide the userspace image and the test, which can be a small reproducer
-script or a suite such as kselftests or LTP. The image supplies userspace, not
-the kernel under test: there is no need to install each kernel revision into
-it.
+script or a suite such as kselftests, LTP, or xfstests. The image supplies
+userspace, not the kernel under test: there is no need to install each kernel
+revision into it.
 
 ## Setup
 
@@ -429,6 +429,47 @@ kernel build.
 Use a fresh `LTP_BUILD_DIR` when changing architecture, build root, toolchain
 or compiler flags. After installing or updating build dependencies, remove
 `LTP_BUILD_DIR/config.cache` so configure refreshes its probe results.
+
+## xfstests
+
+Set `XFSTESTS_SOURCE` in `setup.conf` or in the test config. Include
+`include/xfstests.conf` and add `${BUILD_XFSTESTS}` to `POST_BUILD_APPEND`:
+
+```conf
+ARCH := x86_64
+INCLUDE ${KLAB_DIR}/include/defaults.conf
+INCLUDE ${KLAB_DIR}/include/xfstests.conf
+
+DEFAULTS OVERRIDE
+ROOT_DISK = /path/to/x86_64.img
+CHROOT_USER = /path/to/x86_64/rootfs
+XFSTESTS_SOURCE = /path/to/xfstests-dev
+POST_BUILD_APPEND = ${BUILD_XFSTESTS} && cp ${KLAB_DIR}/tests/my-test/local.config ${OUTPUT_DIR}/xfstests.config
+
+TEST_START
+TEST_TYPE = test
+TEST = ${SSH} sh -c 'cd /mnt/build/xfstests && HOST_OPTIONS=/mnt/build/xfstests.config RESULT_BASE=/mnt/build/xfstests-results ./check generic/001'
+```
+
+xfstests builds in-tree, so the hook builds a fresh copy of an unconfigured
+source tree in `OUTPUT_DIR`. It uses `CHROOT_USER` (or the host if empty)
+and never configures or builds in the supplied source tree. See the
+[xfstests README](https://git.kernel.org/pub/scm/fs/xfs/xfstests-dev.git/tree/README)
+for build and guest runtime dependencies. `XFSTESTS_BUILD_OPTIONS` passes
+make arguments and defaults to `-j$(nproc)`; kernel compiler settings don't
+apply.
+
+The hook replaces its staged install at `OUTPUT_DIR/xfstests` on each
+successful build. Keep the test configuration and results outside that
+directory, as in the example. Run native `./check` from `/mnt/build/xfstests`
+with the test names or groups you want.
+
+k-lab does not provision or select filesystem test devices. Enable the
+filesystem and any required storage drivers in the guest kernel, then set
+`TEST_DEV`, `TEST_DIR` and, where required, `SCRATCH_DEV` and `SCRATCH_MNT`
+in the native xfstests configuration. Use only disposable guest devices:
+xfstests can overwrite both test and scratch storage. Never select the guest
+root disk or a device containing data you need.
 
 ## SUSE kernel configuration
 
